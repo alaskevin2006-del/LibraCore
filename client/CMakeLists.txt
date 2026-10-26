@@ -21,6 +21,8 @@ qt_add_qml_module(appclient
     URI client
     QML_FILES
         Main.qml
+        pages/reader/ReaderHome.qml
+        pages/admin/AdminHome.qml
 )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
