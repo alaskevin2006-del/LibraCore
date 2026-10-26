@@ -1,0 +1,21 @@
+# Qt / CMake 构建文件
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Qt Creator 用户配置
+*.user
+*.user.*
+.qtcreator/
+
+# 编译生成的程序
+*.exe
+*.o
+*.obj
+*.dll
+
+# 临时文件
+*.log
+*.tmp
