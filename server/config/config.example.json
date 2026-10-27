@@ -1,0 +1,27 @@
+{
+  "listeners": [
+    {
+      "address": "0.0.0.0",
+      "port": 8080,
+      "https": false
+    }
+  ],
+  "db_clients": [
+    {
+      "name": "default",
+      "rdbms": "mysql",
+      "host": "127.0.0.1",
+      "port": 3306,
+      "dbname": "libra_core",
+      "user": "TODO_填写数据库用户名",
+      "passwd": "TODO_从环境变量读取，不要写明文密码",
+      "connection_number": 5
+    }
+  ],
+  "app": {
+    "number_of_threads": 4,
+    "enable_session": true,
+    "document_root": "./",
+    "log_path": "./logs"
+  }
+}

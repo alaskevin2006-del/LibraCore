@@ -14,16 +14,26 @@ if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/importedcontent/CMakeLists.txt")
 endif()
 
 qt_add_executable(appclient
-    main.cpp
+    src/main.cpp
 )
 
 qt_add_qml_module(appclient
     URI client
     QML_FILES
-        Main.qml
-        pages/reader/ReaderHome.qml
-        pages/admin/AdminHome.qml
+        qml/Main.qml
+        qml/reader/ReaderHome.qml
+        qml/admin/AdminHome.qml
+        # qml/components/ 下的公共组件在此注册
+    # 注意：QML 文件放在 qml/ 子目录时，与模块 URI 的映射由 DHW/HYQ 按需调整
+    # （可用 set_source_files_properties(... QT_RESOURCE_ALIAS ...)，或拆成 client.reader / client.admin 子模块）
 )
+
+# 图片、图标等静态资源（放入 resources/ 后在 QML 中以 "qrc:/..." 引用）
+# qt_add_resources(appclient "appclient_resources"
+#     PREFIX "/"
+#     FILES
+#         resources/app.ico
+# )
 
 # Qt for iOS sets MACOSX_BUNDLE_GUI_IDENTIFIER automatically since Qt 6.1.
 # If you are developing for iOS or macOS you should consider setting an

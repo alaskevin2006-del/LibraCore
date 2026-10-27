@@ -1,0 +1,40 @@
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: libra_core_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?请在 .env 中设置}
+      MYSQL_DATABASE: libra_core
+      MYSQL_USER: ${MYSQL_USER:?请在 .env 中设置}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?请在 .env 中设置}
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../database/schema.sql:/docker-entrypoint-initdb.d/01-schema.sql:ro
+      - ../database/seed.sql:/docker-entrypoint-initdb.d/02-seed.sql:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  server:
+    # TODO(LKX): 补 deploy/Dockerfile.server 后再启用本服务
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.server
+    container_name: libra_core_server
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+    # 本地配置不入库，运行时由 .env 提供：
+    # env_file: .env
+
+volumes:
+  mysql_data:
