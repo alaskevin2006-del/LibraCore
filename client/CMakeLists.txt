@@ -25,6 +25,7 @@ qt_add_qml_module(appclient
         qml/admin/AdminHome.qml
         qml/components/BookSearchBar.qml
         qml/components/BookListView.qml
+        qml/admin/AdminBooksPage.qml
         # qml/components/ 下的公共组件在此注册
     # 注意：QML 文件放在 qml/ 子目录时，与模块 URI 的映射由 DHW/HYQ 按需调整
     # （可用 set_source_files_properties(... QT_RESOURCE_ALIAS ...)，或拆成 client.reader / client.admin 子模块）
