@@ -1,41 +1,1551 @@
+# LibraCore API OpenAPI 3.0.3（独立编写，接口草案；未经联调）
 openapi: 3.0.3
-
 info:
-  title: LibraCore API
-  version: 0.1.0
-  description: >
-    图书馆管理系统前后端接口契约。
-    本文件由 LKX 牵头维护，前端（Qt）与后端（Drogon）以本文件为准，
-    接口变更必须先改这里再各自实现。
-
+  title: LibraCore Library Management API
+  version: 0.2.0-draft
+  description: |-
+    LibraCore 四人项目的 API-first 契约草案（未实现、未合并、未冻结）。以具体馆藏副本为借还对象。由 Koha 的领域建模启发，但不是 Koha API 文件副本。
+    字段为 snake_case；ID 为十进制字符串（可映射到 MySQL BIGINT，兼容 QML/JS 整数精度）；日期时间为 RFC3339 UTC。
+    角色包括 reader/admin；本文件是待团队评审的接口草案，确认后再按契约开发。
 servers:
-  - url: http://localhost:8080
-    description: 本地开发环境
-  - url: https://TODO_填写公网地址
-    description: 部署环境
-
+- url: http://localhost:8080
+  description: 本地开发服务；部署时配置实际 HTTPS 地址
 tags:
-  - name: books
-    description: 图书
-  - name: readers
-    description: 读者
-  - name: borrow
-    description: 借阅
-
+- name: health
+  description: 健康检查
+- name: auth
+  description: 认证
+- name: books
+  description: 书目
+- name: copies
+  description: 具体馆藏副本
+- name: readers
+  description: 读者管理
+- name: loans
+  description: 借阅与归还
+security:
+- BearerAuth: []
 paths:
-  # TODO(LKX): 按下周目标补全各接口的参数与响应结构，
-  # 优先项：读者端图书查询、管理员端图书列表。以下为路径占位骨架。
-  /api/books:
+  /health:
     get:
-      tags: [books]
-      summary: 图书查询（读者端 / 管理员端共用）
+      tags:
+      - health
+      summary: 服务存活检查（不代表数据库一定可用）
+      operationId: getHealth
+      security: []
+      x-libracore-stage: M1
       responses:
         '200':
-          description: TODO 定义响应结构
-  /api/borrow:
-    get:
-      tags: [borrow]
-      summary: 借阅记录查询
+          description: 后端进程存活
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  status:
+                    type: string
+                    enum:
+                    - ok
+                required:
+                - status
+              example:
+                status: ok
+      x-required-roles: []
+  /api/v1/auth/login:
+    post:
+      tags:
+      - auth
+      summary: 用户登录
+      operationId: login
+      x-libracore-stage: M2
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
       responses:
         '200':
-          description: TODO 定义响应结构
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles: []
+  /api/v1/me:
+    get:
+      tags:
+      - auth
+      summary: 获取当前登录用户
+      operationId: getCurrentUser
+      x-libracore-stage: M2
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - reader
+      - admin
+  /api/v1/books:
+    get:
+      tags:
+      - books
+      summary: 搜索和分页查询书目
+      operationId: listBooks
+      x-libracore-stage: M1
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/Query'
+      - $ref: '#/components/parameters/Category'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookListResponse'
+              example:
+                data:
+                - id: '1001'
+                  title: 软件工程导论
+                  author: 示例作者
+                  status: active
+                  total_copies: 3
+                  available_copies: 2
+                  created_at: '2026-10-27T06:00:00Z'
+                meta:
+                  page: 1
+                  page_size: 20
+                  total: 1
+                  total_pages: 1
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles: []
+    post:
+      tags:
+      - books
+      summary: 新增书目（管理员）
+      operationId: createBook
+      x-libracore-stage: M2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookCreate'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+          headers:
+            Location:
+              description: 新建资源的路径
+              schema:
+                type: string
+              example: /api/v1/books/1001
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/books/{book_id}:
+    get:
+      tags:
+      - books
+      summary: 书目详情
+      operationId: getBook
+      x-libracore-stage: M2
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/BookId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles: []
+    patch:
+      tags:
+      - books
+      summary: 修改书目（管理员）
+      operationId: updateBook
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/BookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookPatch'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    delete:
+      tags:
+      - books
+      summary: 归档书目（管理员；存在借出副本时拒绝）
+      operationId: deleteBook
+      x-libracore-stage: M2
+      description: 软归档书目、将所有 available 副本统一退藏；若该书仍有 borrowed 副本则 409。保留书目和副本历史关联，归档后不再向普通书目查询返回该项。
+      parameters:
+      - $ref: '#/components/parameters/BookId'
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/books/{book_id}/copies:
+    get:
+      tags:
+      - copies
+      summary: 查看某书目的馆藏副本列表
+      operationId: listBookCopies
+      x-libracore-stage: M2
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/BookId'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles: []
+    post:
+      tags:
+      - copies
+      summary: 新增具体馆藏副本（管理员）
+      operationId: createBookCopy
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/BookId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyCreate'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyResponse'
+          headers:
+            Location:
+              description: 新建资源的路径
+              schema:
+                type: string
+              example: /api/v1/copies/2001
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/copies/{copy_id}:
+    get:
+      tags:
+      - copies
+      summary: 获取具体馆藏副本
+      operationId: getCopy
+      x-libracore-stage: M2
+      security: []
+      parameters:
+      - $ref: '#/components/parameters/CopyId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles: []
+    patch:
+      tags:
+      - copies
+      summary: 修改副本条码（管理员；不得修改借阅状态）
+      operationId: updateCopy
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/CopyId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CopyPatch'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CopyResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    delete:
+      tags:
+      - copies
+      summary: 退藏具体副本（管理员；软退藏，已借出时拒绝）
+      operationId: retireCopy
+      x-libracore-stage: M2
+      description: 不物理删除历史记录；状态从 available 变更为 retired。借阅中的副本拒绝操作。
+      parameters:
+      - $ref: '#/components/parameters/CopyId'
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/readers:
+    get:
+      tags:
+      - readers
+      summary: 分页查询读者（管理员）
+      operationId: listReaders
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    post:
+      tags:
+      - readers
+      summary: 新增读者账号（管理员）
+      operationId: createReader
+      x-libracore-stage: M2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderCreate'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderResponse'
+          headers:
+            Location:
+              description: 新建资源的路径
+              schema:
+                type: string
+              example: /api/v1/readers/42
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/readers/{reader_id}:
+    get:
+      tags:
+      - readers
+      summary: 查询读者详情（管理员）
+      operationId: getReader
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/ReaderId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    patch:
+      tags:
+      - readers
+      summary: 更新读者资料或状态（管理员）
+      operationId: updateReader
+      x-libracore-stage: M2
+      parameters:
+      - $ref: '#/components/parameters/ReaderId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ReaderPatch'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReaderResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    delete:
+      tags:
+      - readers
+      summary: 注销读者账号（管理员；有有效借阅时拒绝）
+      operationId: deleteReader
+      x-libracore-stage: M2
+      description: 保留借阅历史关联；实现为禁用账号，不物理删除历史。已存在有效借阅时返回 409。
+      parameters:
+      - $ref: '#/components/parameters/ReaderId'
+      responses:
+        '204':
+          description: 成功
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+  /api/v1/loans:
+    get:
+      tags:
+      - loans
+      summary: 查询所有借阅记录（管理员）
+      operationId: listLoans
+      x-libracore-stage: M3
+      parameters:
+      - $ref: '#/components/parameters/ReaderFilter'
+      - $ref: '#/components/parameters/LoanStatus'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - admin
+    post:
+      tags:
+      - loans
+      summary: 借阅指定副本（读者自借或管理员代借）
+      operationId: createLoan
+      x-libracore-stage: M3
+      description: reader 角色自行借阅，只提交 copy_id，reader_id 由令牌确定；admin 角色代借必须额外提交 reader_id。服务端必须验证角色与读者状态。通过事务保证同一副本最多一条
+        active 借阅；应还时间由后端计算。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoanCreate'
+      responses:
+        '201':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+              example:
+                data:
+                  id: '3001'
+                  copy_id: '2001'
+                  reader_id: '42'
+                  status: active
+                  borrowed_at: '2026-10-27T06:00:00Z'
+                  due_at: '2026-11-10T06:00:00Z'
+                  returned_at: null
+          headers:
+            Location:
+              description: 新建资源的路径
+              schema:
+                type: string
+              example: /api/v1/loans/3001
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - reader
+      - admin
+      x-ownership-rule: reader 从令牌获取 reader_id，禁止请求指定；admin 必须显式传 reader_id
+  /api/v1/me/loans:
+    get:
+      tags:
+      - loans
+      summary: 获取当前读者的借阅记录
+      operationId: listMyLoans
+      x-libracore-stage: M3
+      parameters:
+      - $ref: '#/components/parameters/LoanStatus'
+      - $ref: '#/components/parameters/Page'
+      - $ref: '#/components/parameters/PageSize'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanListResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '422':
+          $ref: '#/components/responses/Validation'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - reader
+  /api/v1/loans/{loan_id}:
+    get:
+      tags:
+      - loans
+      summary: 查询指定借阅记录（所属读者或管理员）
+      operationId: getLoan
+      x-libracore-stage: M3
+      parameters:
+      - $ref: '#/components/parameters/LoanId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - reader
+      - admin
+      x-ownership-rule: reader 限自己的借阅；admin 可访问全部
+  /api/v1/loans/{loan_id}/return:
+    post:
+      tags:
+      - loans
+      summary: 归还指定借阅记录（所属读者或管理员）
+      operationId: returnLoan
+      x-libracore-stage: M3
+      description: 检查所属身份和 active 状态，在同一事务内把借阅变为 returned、副本变为 available；重复归还返回 409（ALREADY_RETURNED），不产生第二次归还记录。
+      parameters:
+      - $ref: '#/components/parameters/LoanId'
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoanResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '500':
+          $ref: '#/components/responses/Internal'
+        '503':
+          $ref: '#/components/responses/Unavailable'
+      x-required-roles:
+      - reader
+      - admin
+      x-ownership-rule: reader 限自己的借阅；admin 可访问全部
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque-or-jwt
+      description: 'Authorization: Bearer <token>，由服务端核验。令牌实现与到期策略需评审；不得写入 Git 或日志。'
+  parameters:
+    BookId:
+      name: book_id
+      in: path
+      description: 书目 ID
+      required: true
+      schema:
+        type: string
+        description: 标识符（十进制字符串，数据库可采用 BIGINT）
+        example: '1001'
+        pattern: ^[1-9][0-9]*$
+    CopyId:
+      name: copy_id
+      in: path
+      description: 馆藏副本 ID
+      required: true
+      schema:
+        type: string
+        description: 标识符（十进制字符串，数据库可采用 BIGINT）
+        example: '1001'
+        pattern: ^[1-9][0-9]*$
+    ReaderId:
+      name: reader_id
+      in: path
+      description: 读者 ID
+      required: true
+      schema:
+        type: string
+        description: 标识符（十进制字符串，数据库可采用 BIGINT）
+        example: '1001'
+        pattern: ^[1-9][0-9]*$
+    LoanId:
+      name: loan_id
+      in: path
+      description: 借阅记录 ID
+      required: true
+      schema:
+        type: string
+        description: 标识符（十进制字符串，数据库可采用 BIGINT）
+        example: '1001'
+        pattern: ^[1-9][0-9]*$
+    Page:
+      name: page
+      in: query
+      description: 页码从 1 开始
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PageSize:
+      name: page_size
+      in: query
+      description: 每页条数，默认20，最大100
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+    Query:
+      name: q
+      in: query
+      description: 按书名、作者或 ISBN 的关键词模糊搜索
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+    Category:
+      name: category
+      in: query
+      description: 图书分类精确匹配
+      required: false
+      schema:
+        type: string
+        maxLength: 100
+    LoanStatus:
+      name: status
+      in: query
+      description: 借阅记录状态
+      required: false
+      schema:
+        type: string
+        enum:
+        - active
+        - returned
+    ReaderFilter:
+      name: reader_id
+      in: query
+      description: 仅管理员可按读者 ID 筛选
+      required: false
+      schema:
+        type: string
+        description: 标识符（十进制字符串，数据库可采用 BIGINT）
+        example: '1001'
+        pattern: ^[1-9][0-9]*$
+  responses:
+    BadRequest:
+      description: 请求 JSON 无法解析或参数格式错误，code=BAD_REQUEST
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unauthorized:
+      description: 未认证、登录失败或访问令牌无效，code=UNAUTHENTICATED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+      headers:
+        WWW-Authenticate:
+          description: 标准 Bearer 认证挑战；token 缺失或无效时返回
+          schema:
+            type: string
+          example: Bearer
+    Forbidden:
+      description: 账号没有对应操作权限，code=PERMISSION_DENIED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    NotFound:
+      description: 指定资源不存在或无权获知其存在，code=RESOURCE_NOT_FOUND
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Conflict:
+      description: '业务状态冲突，见 code: COPY_UNAVAILABLE / ALREADY_RETURNED / RESOURCE_IN_USE / DUPLICATE_RESOURCE'
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Validation:
+      description: 合法 JSON 但字段值不符合校验规则，code=VALIDATION_FAILED
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Internal:
+      description: 服务器内部错误，code=INTERNAL_ERROR；不得泄露 SQL 和堆栈
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Unavailable:
+      description: 数据库或依赖暂不可用，code=SERVICE_UNAVAILABLE
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    PageMeta:
+      type: object
+      additionalProperties: false
+      properties:
+        page:
+          type: integer
+          minimum: 1
+          example: 1
+        page_size:
+          type: integer
+          minimum: 1
+          maximum: 100
+          example: 20
+        total:
+          type: integer
+          minimum: 0
+          example: 1
+        total_pages:
+          type: integer
+          minimum: 0
+          example: 1
+      required:
+      - page
+      - page_size
+      - total
+      - total_pages
+    Problem:
+      type: object
+      additionalProperties: true
+      properties:
+        type:
+          type: string
+          description: Problem 类别 URI。尚无专属问题 URI 时使用 about:blank
+          example: about:blank
+          format: uri-reference
+        title:
+          type: string
+          description: 错误的简短说明
+          example: Conflict
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+          example: 409
+        detail:
+          type: string
+          description: 对用户安全的错误详情
+          example: 该馆藏副本不可借阅
+        code:
+          type: string
+          description: 稳定业务错误码，不依赖 detail 文案
+          example: COPY_UNAVAILABLE
+        trace_id:
+          type: string
+          description: 便于关联服务日志的请求标识
+          example: req-demo-001
+        instance:
+          type: string
+          description: 可选的本次错误关联 URI
+          example: /api/v1/loans
+      required:
+      - type
+      - title
+      - status
+      - code
+    Account:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        username:
+          type: string
+          description: 登录账号
+          example: reader001
+        role:
+          type: string
+          example: reader
+          enum:
+          - reader
+          - admin
+        display_name:
+          type: string
+          example: 演示读者
+      required:
+      - id
+      - username
+      - role
+      - display_name
+    LoginRequest:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          example: reader001
+          minLength: 1
+          maxLength: 64
+        password:
+          type: string
+          example: DEMO_PASSWORD_NOT_REAL
+          minLength: 1
+          format: password
+      required:
+      - username
+      - password
+    LoginResult:
+      type: object
+      additionalProperties: false
+      properties:
+        access_token:
+          type: string
+          description: Bearer 访问令牌（实际值不可记录到日志）
+          example: DEMO_TOKEN
+        token_type:
+          type: string
+          example: Bearer
+          enum:
+          - Bearer
+        expires_in:
+          type: integer
+          minimum: 1
+          description: 有效期，秒
+          example: 3600
+        user:
+          $ref: '#/components/schemas/Account'
+      required:
+      - access_token
+      - token_type
+      - expires_in
+      - user
+    BookBase:
+      type: object
+      additionalProperties: false
+      properties:
+        isbn:
+          type: string
+          description: 可选，ISBN10/13 格式验证规则后续由团队确认
+          example: '9787302000000'
+          maxLength: 20
+        title:
+          type: string
+          example: 软件工程导论
+          maxLength: 255
+        author:
+          type: string
+          example: 示例作者
+          maxLength: 255
+        publisher:
+          type: string
+          example: 示例出版社
+          maxLength: 255
+        category:
+          type: string
+          example: 计算机
+          maxLength: 100
+        published_on:
+          type: string
+          example: '2022-05-01'
+          format: date
+        description:
+          type: string
+          example: 示例图书简介
+          maxLength: 2000
+      required:
+      - title
+      - author
+    Book:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        isbn:
+          type: string
+          maxLength: 20
+        title:
+          type: string
+          example: 软件工程导论
+        author:
+          type: string
+          example: 示例作者
+        publisher:
+          type: string
+        category:
+          type: string
+        published_on:
+          type: string
+          format: date
+        description:
+          type: string
+        status:
+          type: string
+          example: active
+          enum:
+          - active
+          - archived
+        total_copies:
+          type: integer
+          minimum: 0
+          readOnly: true
+          example: 3
+        available_copies:
+          type: integer
+          minimum: 0
+          readOnly: true
+          example: 2
+        created_at:
+          type: string
+          description: RFC 3339 日期时间，服务器统一使用 UTC
+          example: '2026-11-10T10:00:00Z'
+          format: date-time
+      required:
+      - id
+      - title
+      - author
+      - status
+      - total_copies
+      - available_copies
+      - created_at
+    BookCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        isbn:
+          type: string
+          maxLength: 20
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        author:
+          type: string
+          minLength: 1
+          maxLength: 255
+        publisher:
+          type: string
+          maxLength: 255
+        category:
+          type: string
+          maxLength: 100
+        published_on:
+          type: string
+          format: date
+        description:
+          type: string
+          maxLength: 2000
+      required:
+      - title
+      - author
+    BookPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        isbn:
+          type: string
+          maxLength: 20
+        title:
+          type: string
+          minLength: 1
+          maxLength: 255
+        author:
+          type: string
+          minLength: 1
+          maxLength: 255
+        publisher:
+          type: string
+          maxLength: 255
+        category:
+          type: string
+          maxLength: 100
+        published_on:
+          type: string
+          format: date
+        description:
+          type: string
+          maxLength: 2000
+    Copy:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        book_id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        barcode:
+          type: string
+          example: LC-000001
+        status:
+          type: string
+          example: available
+          enum:
+          - available
+          - borrowed
+          - retired
+        created_at:
+          type: string
+          description: RFC 3339 日期时间，服务器统一使用 UTC
+          example: '2026-11-10T10:00:00Z'
+          format: date-time
+      required:
+      - id
+      - book_id
+      - barcode
+      - status
+      - created_at
+      description: status 只能通过借还事务或退藏操作改变，不可直接 PATCH 为 available/borrowed
+    CopyCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        barcode:
+          type: string
+          example: LC-000001
+          minLength: 1
+          maxLength: 64
+      required:
+      - barcode
+    CopyPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        barcode:
+          type: string
+          example: LC-000001
+          minLength: 1
+          maxLength: 64
+    Reader:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 读者 ID；与登录账号的 user ID 一致
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        username:
+          type: string
+          example: reader001
+        display_name:
+          type: string
+          example: 演示读者
+        email:
+          type: string
+          example: reader@example.org
+          format: email
+        is_active:
+          type: boolean
+          example: true
+        created_at:
+          type: string
+          description: RFC 3339 日期时间，服务器统一使用 UTC
+          example: '2026-11-10T10:00:00Z'
+          format: date-time
+      required:
+      - id
+      - username
+      - display_name
+      - is_active
+      - created_at
+    ReaderCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        username:
+          type: string
+          example: reader001
+          minLength: 1
+          maxLength: 64
+        password:
+          type: string
+          example: DEMO_PASSWORD_NOT_REAL
+          minLength: 8
+          format: password
+        display_name:
+          type: string
+          example: 演示读者
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          example: reader@example.org
+          format: email
+      required:
+      - username
+      - password
+      - display_name
+    ReaderPatch:
+      type: object
+      minProperties: 1
+      additionalProperties: false
+      properties:
+        display_name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        is_active:
+          type: boolean
+    Loan:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        copy_id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        reader_id:
+          type: string
+          description: 标识符（十进制字符串，数据库可采用 BIGINT）
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        status:
+          type: string
+          example: active
+          enum:
+          - active
+          - returned
+        borrowed_at:
+          type: string
+          description: RFC 3339 日期时间，服务器统一使用 UTC
+          example: '2026-11-10T10:00:00Z'
+          format: date-time
+        due_at:
+          type: string
+          description: 应还时间，由服务端统一计算，借期长度待团队确认
+          example: '2026-11-10T10:00:00Z'
+          format: date-time
+        returned_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: 未归还时为 null
+          example: null
+      required:
+      - id
+      - copy_id
+      - reader_id
+      - status
+      - borrowed_at
+      - due_at
+      - returned_at
+    LoanCreate:
+      type: object
+      additionalProperties: false
+      properties:
+        copy_id:
+          type: string
+          description: 具体馆藏副本 ID，不是书目 ID
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+        reader_id:
+          type: string
+          description: 管理员代办借阅时必填；普通读者必须省略，读者身份从访问令牌得出
+          example: '1001'
+          pattern: ^[1-9][0-9]*$
+      required:
+      - copy_id
+      description: reader 角色只发送 copy_id；admin 角色借书时还必须传 reader_id。由后端验证角色和读者存在性，不能让 reader 冒充他人。
+    LoginResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/LoginResult'
+      required:
+      - data
+    AccountResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Account'
+      required:
+      - data
+    BookResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Book'
+      required:
+      - data
+    BookListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Book'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - data
+      - meta
+    CopyResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Copy'
+      required:
+      - data
+    CopyListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Copy'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - data
+      - meta
+    ReaderResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Reader'
+      required:
+      - data
+    ReaderListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Reader'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - data
+      - meta
+    LoanResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          $ref: '#/components/schemas/Loan'
+      required:
+      - data
+    LoanListResponse:
+      type: object
+      additionalProperties: false
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/Loan'
+        meta:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - data
+      - meta
