@@ -1,8 +1,3 @@
--- 建表脚本（ZYJ 负责）
--- 目标：图书 / 读者 / 借阅记录三张核心表 + 管理员表
--- 约束：字段名与 api/openapi.yaml 中的接口字段保持一致
--- 注意：本文件会被 Docker 初始化执行，具备幂等性（可重复安全执行）
-
 CREATE DATABASE IF NOT EXISTS `libracore` DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE `libracore`;
 
@@ -24,11 +19,12 @@ CREATE TABLE IF NOT EXISTS `readers` (
     `email` VARCHAR(100) NULL COMMENT '联系邮箱',
     `phone` VARCHAR(20) NULL COMMENT '联系电话',
     `status` ENUM('active', 'suspended') NOT NULL DEFAULT 'active' COMMENT '账号状态',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_reader_card` (`reader_card_id`),
+    INDEX `idx_reader_name` (`name`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='读者表';
 
 -- 3. 图书表 (books)
--- 包含基础图书属性与库存副本计数（对应前端展示与借还控制）
 CREATE TABLE IF NOT EXISTS `books` (
     `id` BIGINT AUTO_INCREMENT PRIMARY KEY,
     `isbn` VARCHAR(20) NOT NULL UNIQUE COMMENT '标准书号 ISBN',
@@ -36,11 +32,12 @@ CREATE TABLE IF NOT EXISTS `books` (
     `author` VARCHAR(100) NOT NULL COMMENT '作者',
     `publisher` VARCHAR(100) NOT NULL COMMENT '出版社',
     `publish_year` INT NULL COMMENT '出版年份',
-    `category` VARCHAR(50) DEFAULT 'General' COMMENT '图书分类',
+    `category` VARCHAR(50) NOT NULL DEFAULT 'General' COMMENT '图书分类',
     `total_copies` INT NOT NULL DEFAULT 1 COMMENT '馆藏总册数',
-    `available_copies` INT NOT NULL DEFAULT 1 COMMENT '当前可借册数',
+    `available_copies` INT NOT NULL DEFAULT 1 COMMENT '当前在馆可借册数',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     INDEX `idx_books_title` (`title`),
+    INDEX `idx_books_author` (`author`),
     INDEX `idx_books_isbn` (`isbn`),
     INDEX `idx_books_category` (`category`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='图书书目表';
