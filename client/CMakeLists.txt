@@ -22,6 +22,7 @@ qt_add_qml_module(appclient
     QML_FILES
         qml/Main.qml
         qml/reader/ReaderHome.qml
+        qml/reader/ReaderBooksPage.qml
         qml/admin/AdminHome.qml
         qml/components/BookSearchBar.qml
         qml/components/BookListView.qml
