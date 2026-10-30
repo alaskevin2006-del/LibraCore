@@ -1,4 +1,5 @@
 # LibraCore API OpenAPI 3.0.3（独立编写，接口草案；未经联调）
+# 2026-10-30 修订：仅做语义完善（可空字段、错误明细、说明与示例），未改动路径、operationId、字段名与既有约定。
 openapi: 3.0.3
 info:
   title: LibraCore Library Management API
@@ -6,7 +7,12 @@ info:
   description: |-
     LibraCore 四人项目的 API-first 契约草案（未实现、未合并、未冻结）。以具体馆藏副本为借还对象。由 Koha 的领域建模启发，但不是 Koha API 文件副本。
     字段为 snake_case；ID 为十进制字符串（可映射到 MySQL BIGINT，兼容 QML/JS 整数精度）；日期时间为 RFC3339 UTC。
-    角色包括 reader/admin；本文件是待团队评审的接口草案，确认后再按契约开发。
+
+    角色包括 reader/admin。授权模型分两层：`security` 表示"该接口是否需要认证"，角色限制由扩展字段 `x-required-roles` 表达（OpenAPI 3.0.3 无法原生表达角色）。`x-ownership-rule` 表示记录级归属规则，后端必须强制校验。`x-libracore-stage` 只是团队排期标记（M1/M2/M3 对应分阶段交付顺序），不代表当前已实现任何接口。
+
+    统一响应约定：成功响应为 `data` 包装，列表为 `data` + `meta` 分页；错误响应一律 `application/problem+json`（RFC 9457 风格）。客户端必须以 `code` 字段分支，不得解析 `detail` 文案；字段级校验错误见 `errors` 数组。
+
+    本文件是待团队评审的接口草案，确认后再按契约开发。尚未确定的业务规则集中列在根级 x-pending-decisions，仅作评审清单，不作为实现依据。
 servers:
 - url: http://localhost:8080
   description: 本地开发服务；部署时配置实际 HTTPS 地址
@@ -25,12 +31,45 @@ tags:
   description: 借阅与归还
 security:
 - BearerAuth: []
+# 尚未确定的业务规则：仅作团队评审清单，不作为实现依据，也不改变现有约定。
+x-pending-decisions:
+- key: loan-policy
+  question: 借期长度、是否允许续借、单读者借阅上限、逾期罚则均未定义
+  impact: 影响 due_at 计算、409 判定与 Qt 端"逾期"展示
+- key: duplicate-loan-code
+  question: 同一读者对同一 copy_id 重复提交，是否保留 COPY_UNAVAILABLE 还是新增 DUPLICATE_LOAN
+  impact: 当前按 COPY_UNAVAILABLE 约定，新增错误码会导致前端分支变更
+- key: health-scope
+  question: /health 是否统一到 /api/v1 前缀；是否需要独立的 readiness（探测数据库）
+  impact: 影响网关探针配置；当前 /health 只反映进程存活
+- key: books-archived-visibility
+  question: 管理员是否需要通过查询参数查看 status=archived 的书目；归档书目是否仍可按 ID 查询
+  impact: 当前 GET /books 默认只返回 active
+- key: copies-visibility
+  question: GET /books/{book_id}/copies 是否包含 retired 副本、是否支持按 status 过滤
+  impact: 读者端"可借副本"数量展示方式
+- key: soft-delete-semantics
+  question: 书目归档与读者注销在数据库层用 status 字段还是 deleted_at 时间戳
+  impact: 影响 schema.sql 字段与查询条件
+- key: reader-account-model
+  question: reader 与登录账号是同一张表，还是 reader 引用独立的 user 表；admin 是否也有 reader 记录
+  impact: 影响读者管理与认证的数据模型
+- key: loan-denormalization
+  question: Loan 是否冗余 book_id / book_title，或提供 expand 参数
+  impact: 不冗余时 Qt 借阅列表需按 copy_id 逐个补查书目，产生 N+1 请求
+- key: uniqueness-rules
+  question: ISBN 是否要求唯一、barcode 唯一范围是全局还是按馆；ISBN 格式校验规则
+  impact: 影响 409 DUPLICATE_RESOURCE 的判定条件
+- key: out-of-scope-endpoints
+  question: 是否补 GET /copies（全馆副本列表）、读者自助改密码、POST /auth/logout、429 限流
+  impact: 当前 23 个操作未覆盖这些场景
 paths:
   /health:
     get:
       tags:
       - health
       summary: 服务存活检查（不代表数据库一定可用）
+      description: '刻意不带 /api/v1 前缀，用于容器探针与网关健康检查；只反映进程存活，不探测数据库。若需区分存活/就绪，另加独立接口（见待确认事项）。'
       operationId: getHealth
       security: []
       x-libracore-stage: M1
@@ -73,6 +112,16 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LoginResponse'
+              example:
+                data:
+                  access_token: DEMO_TOKEN
+                  token_type: Bearer
+                  expires_in: 3600
+                  user:
+                    id: '42'
+                    username: reader001
+                    role: reader
+                    display_name: 演示读者
         '400':
           $ref: '#/components/responses/BadRequest'
         '401':
@@ -100,6 +149,8 @@ paths:
                 $ref: '#/components/schemas/AccountResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           $ref: '#/components/responses/Internal'
         '503':
@@ -112,6 +163,10 @@ paths:
       tags:
       - books
       summary: 搜索和分页查询书目
+      description: |-
+        公开接口（无需认证）。默认只返回 `status=active` 的书目，已归档书目不出现在普通查询结果中。
+        返回值直接支撑 Qt 读者端图书列表：`data[]` 的 `title`/`author` 用于主信息，`available_copies` 用于判断"可借"，`status` 用于异常态展示。
+        `q` 对书名、作者、ISBN 做模糊匹配，空白字符串按未传处理。
       operationId: listBooks
       x-libracore-stage: M1
       security: []
@@ -130,16 +185,33 @@ paths:
               example:
                 data:
                 - id: '1001'
+                  isbn: '9787302000000'
                   title: 软件工程导论
                   author: 示例作者
+                  publisher: 示例出版社
+                  category: 计算机
+                  published_on: '2022-05-01'
+                  description: 示例图书简介
                   status: active
                   total_copies: 3
                   available_copies: 2
                   created_at: '2026-10-27T06:00:00Z'
+                - id: '1002'
+                  isbn: null
+                  title: 馆藏无 ISBN 的旧书
+                  author: 佚名
+                  publisher: null
+                  category: null
+                  published_on: null
+                  description: null
+                  status: active
+                  total_copies: 1
+                  available_copies: 0
+                  created_at: '2026-10-20T02:30:00Z'
                 meta:
                   page: 1
                   page_size: 20
-                  total: 1
+                  total: 2
                   total_pages: 1
         '400':
           $ref: '#/components/responses/BadRequest'
@@ -196,6 +268,7 @@ paths:
       tags:
       - books
       summary: 书目详情
+      description: 公开接口。返回书目字段与副本汇总（total_copies/available_copies）。已归档书目是否仍可按 ID 访问，见待确认事项。
       operationId: getBook
       x-libracore-stage: M2
       security: []
@@ -289,6 +362,7 @@ paths:
       tags:
       - copies
       summary: 查看某书目的馆藏副本列表
+      description: '公开接口，供读者端判断某本书是否有可借副本。是否包含 retired 副本、是否支持按 status 过滤，见待确认事项；实现前先按当前分页约定返回。'
       operationId: listBookCopies
       x-libracore-stage: M2
       security: []
@@ -660,8 +734,12 @@ paths:
       summary: 借阅指定副本（读者自借或管理员代借）
       operationId: createLoan
       x-libracore-stage: M3
-      description: reader 角色自行借阅，只提交 copy_id，reader_id 由令牌确定；admin 角色代借必须额外提交 reader_id。服务端必须验证角色与读者状态。通过事务保证同一副本最多一条
-        active 借阅；应还时间由后端计算。
+      description: |-
+        reader 角色自行借阅，只提交 copy_id，reader_id 由令牌确定；admin 角色代借必须额外提交 reader_id。
+        服务端必须验证角色与读者状态：reader 提交 reader_id → 422 VALIDATION_FAILED；admin 缺 reader_id → 422 VALIDATION_FAILED。
+        通过事务保证同一副本最多一条 active 借阅；应还时间由后端计算，借期长度与借阅上限见待确认事项。
+        失败语义：副本不存在 404 RESOURCE_NOT_FOUND；副本已借出、已退藏或被同一读者重复借阅 409 COPY_UNAVAILABLE；读者被禁用 403 PERMISSION_DENIED；读者不存在 404 RESOURCE_NOT_FOUND。
+        重复借阅（同一读者对同一 copy_id 再次提交）按 409 + COPY_UNAVAILABLE 处理，不新增两条 active 记录；是否需要独立的 DUPLICATE_LOAN 错误码见待确认事项。
       requestBody:
         required: true
         content:
@@ -944,17 +1022,37 @@ components:
           schema:
             $ref: '#/components/schemas/Problem'
     Conflict:
-      description: '业务状态冲突，见 code: COPY_UNAVAILABLE / ALREADY_RETURNED / RESOURCE_IN_USE / DUPLICATE_RESOURCE'
+      description: |-
+        业务状态冲突。按 code 区分具体原因：
+        COPY_UNAVAILABLE（副本已借出/已退藏，或同一读者重复借阅）；
+        ALREADY_RETURNED（对已归还的借阅再次归还）；
+        RESOURCE_IN_USE（书目录尚有借出副本、读者尚有有效借阅，不能归档/注销）；
+        DUPLICATE_RESOURCE（ISBN、条码、用户名等唯一约束冲突）。
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
     Validation:
-      description: 合法 JSON 但字段值不符合校验规则，code=VALIDATION_FAILED
+      description: '合法 JSON 但字段值不符合校验规则，code=VALIDATION_FAILED；具体字段见 errors[].pointer（RFC 6901 JSON Pointer），无字段可指时 errors 可省略'
       content:
         application/problem+json:
           schema:
             $ref: '#/components/schemas/Problem'
+          example:
+            type: about:blank
+            title: Unprocessable Entity
+            status: 422
+            code: VALIDATION_FAILED
+            detail: 请求字段校验未通过
+            trace_id: req-demo-002
+            instance: /api/v1/loans
+            errors:
+            - pointer: /copy_id
+              detail: 必须是十进制字符串
+              code: INVALID_FORMAT
+            - pointer: /reader_id
+              detail: reader 角色不得指定 reader_id
+              code: FORBIDDEN_FIELD
     Internal:
       description: 服务器内部错误，code=INTERNAL_ERROR；不得泄露 SQL 和堆栈
       content:
@@ -1028,11 +1126,41 @@ components:
           type: string
           description: 可选的本次错误关联 URI
           example: /api/v1/loans
+        errors:
+          type: array
+          description: 字段级校验错误明细；仅 422 VALIDATION_FAILED 使用，其余错误可省略
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              pointer:
+                type: string
+                description: 出错字段的 JSON Pointer（RFC 6901），指向请求体中的位置
+                example: /copy_id
+              detail:
+                type: string
+                description: 面向用户的字段级说明
+                example: 必须是十进制字符串
+              code:
+                type: string
+                description: 字段级错误码
+                example: INVALID_FORMAT
+            required:
+            - pointer
+            - detail
       required:
       - type
       - title
       - status
       - code
+      example:
+        type: about:blank
+        title: Conflict
+        status: 409
+        code: COPY_UNAVAILABLE
+        detail: 该馆藏副本不可借阅
+        trace_id: req-demo-001
+        instance: /api/v1/loans
     Account:
       type: object
       additionalProperties: false
@@ -1102,42 +1230,6 @@ components:
       - token_type
       - expires_in
       - user
-    BookBase:
-      type: object
-      additionalProperties: false
-      properties:
-        isbn:
-          type: string
-          description: 可选，ISBN10/13 格式验证规则后续由团队确认
-          example: '9787302000000'
-          maxLength: 20
-        title:
-          type: string
-          example: 软件工程导论
-          maxLength: 255
-        author:
-          type: string
-          example: 示例作者
-          maxLength: 255
-        publisher:
-          type: string
-          example: 示例出版社
-          maxLength: 255
-        category:
-          type: string
-          example: 计算机
-          maxLength: 100
-        published_on:
-          type: string
-          example: '2022-05-01'
-          format: date
-        description:
-          type: string
-          example: 示例图书简介
-          maxLength: 2000
-      required:
-      - title
-      - author
     Book:
       type: object
       additionalProperties: false
@@ -1150,6 +1242,8 @@ components:
         isbn:
           type: string
           maxLength: 20
+          nullable: true
+          description: 无 ISBN 时可返回 null，也可省略该字段
         title:
           type: string
           example: 软件工程导论
@@ -1158,13 +1252,21 @@ components:
           example: 示例作者
         publisher:
           type: string
+          nullable: true
+          description: 未知时返回 null
         category:
           type: string
+          nullable: true
+          description: 未分类时返回 null
         published_on:
           type: string
           format: date
+          nullable: true
+          description: 出版日期未知时返回 null；格式为 date，不是 date-time
         description:
           type: string
+          nullable: true
+          description: 无简介时返回 null
         status:
           type: string
           example: active
@@ -1194,6 +1296,19 @@ components:
       - total_copies
       - available_copies
       - created_at
+      example:
+        id: '1001'
+        isbn: '9787302000000'
+        title: 软件工程导论
+        author: 示例作者
+        publisher: 示例出版社
+        category: 计算机
+        published_on: '2022-05-01'
+        description: 示例图书简介
+        status: active
+        total_copies: 3
+        available_copies: 2
+        created_at: '2026-10-27T06:00:00Z'
     BookCreate:
       type: object
       additionalProperties: false
@@ -1201,6 +1316,7 @@ components:
         isbn:
           type: string
           maxLength: 20
+          nullable: true
         title:
           type: string
           minLength: 1
@@ -1212,15 +1328,19 @@ components:
         publisher:
           type: string
           maxLength: 255
+          nullable: true
         category:
           type: string
           maxLength: 100
+          nullable: true
         published_on:
           type: string
           format: date
+          nullable: true
         description:
           type: string
           maxLength: 2000
+          nullable: true
       required:
       - title
       - author
@@ -1232,6 +1352,8 @@ components:
         isbn:
           type: string
           maxLength: 20
+          nullable: true
+          description: 传 null 表示清空该字段
         title:
           type: string
           minLength: 1
@@ -1243,15 +1365,20 @@ components:
         publisher:
           type: string
           maxLength: 255
+          nullable: true
+          description: 传 null 表示清空该字段
         category:
           type: string
           maxLength: 100
+          nullable: true
         published_on:
           type: string
           format: date
+          nullable: true
         description:
           type: string
           maxLength: 2000
+          nullable: true
     Copy:
       type: object
       additionalProperties: false
@@ -1328,6 +1455,8 @@ components:
           type: string
           example: reader@example.org
           format: email
+          nullable: true
+          description: 未填写时返回 null
         is_active:
           type: boolean
           example: true
@@ -1365,6 +1494,7 @@ components:
           type: string
           example: reader@example.org
           format: email
+          nullable: true
       required:
       - username
       - password
@@ -1381,6 +1511,8 @@ components:
         email:
           type: string
           format: email
+          nullable: true
+          description: 传 null 表示清空该字段
         is_active:
           type: boolean
     Loan:
@@ -1408,6 +1540,7 @@ components:
           enum:
           - active
           - returned
+          description: '只表达借阅生命周期。逾期不是独立状态：由 status=active 且 due_at < 当前时间推导，Qt 端自行计算并展示"已逾期"'
         borrowed_at:
           type: string
           description: RFC 3339 日期时间，服务器统一使用 UTC
