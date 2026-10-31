@@ -1,3 +1,4 @@
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
@@ -24,7 +25,7 @@ Page {
 
             // 返回按钮
             Button {
-                text: "返回管理员首页"
+                text: "← 返回管理员首页"
 
                 // 只有打开图书管理页面时才显示
                 visible: adminHome.showingBooks
@@ -33,16 +34,6 @@ Page {
                     // 修改变量，让页面切回管理员首页
                     adminHome.showingBooks = false
                 }
-            }
-
-            // 显示当前页面标题
-            Label {
-                text: adminHome.showingBooks
-                      ? "图书管理" : "管理员首页"
-
-                font.pixelSize: 22
-                font.bold: true
-                Layout.fillWidth: true
             }
         }
 
@@ -62,37 +53,31 @@ Page {
         }
     }
 
-    // =================================================
-    // 管理员首页
-    // =================================================
-
-    // Component 定义一个可以被 Loader 加载的组件
     Component {
         id: homeComponent
 
-        Item {
-            ColumnLayout {
-                anchors.centerIn: parent
-                spacing: 20
+        ColumnLayout {
+            spacing: 20
 
-                Label {
-                    text: "欢迎进入管理员端"
-                    font.pixelSize: 28
-                    Layout.alignment: Qt.AlignHCenter
-                }
+            Item {
+                Layout.fillHeight: true
+            }
 
-                // 打开图书管理页面的按钮
-                Button {
-                    text: "图书管理"
+            Label {
+                text: "欢迎进入管理员端"
+                font.pixelSize: 28
+                Layout.alignment: Qt.AlignHCenter
+            }
 
-                    Layout.preferredWidth: 180
-                    Layout.alignment: Qt.AlignHCenter
+            Button {
+                text: "图书管理"
+                Layout.alignment: Qt.AlignHCenter
 
-                    onClicked: {
-                        // 改成 true 后，Loader 自动显示图书页面
-                        adminHome.showingBooks = true
-                    }
-                }
+                onClicked: adminHome.showingBooks = true
+            }
+
+            Item {
+                Layout.fillHeight: true
             }
         }
     }
