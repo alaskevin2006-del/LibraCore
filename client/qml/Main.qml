@@ -3,8 +3,8 @@ import QtQuick.Controls.Basic
 import QtQuick.Layouts
 
 // 导入我们自己创建的两个页面目录
-import "pages/reader"
-import "pages/admin"
+import "reader"
+import "admin"
 
 ApplicationWindow {
     id: window
