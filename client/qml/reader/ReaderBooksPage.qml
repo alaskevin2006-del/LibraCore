@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 import "../components"
+import LibraCore.Network 1.0
 
 Page {
     id: readerBooksPage
@@ -31,14 +32,45 @@ Page {
         BookSearchBar {
             id: searchBar
             Layout.fillWidth: true
+            onSearchRequested: function(keyword) { searchBooks(keyword) }
         }
 
+        BusyIndicator {
+            Layout.alignment: Qt.AlignHCenter
+            running: booksApi.loading
+            visible: running
+        }
+        Label {
+            Layout.fillWidth: true
+            visible: booksApi.error.length > 0
+            text: booksApi.error
+            wrapMode: Text.Wrap
+        }
+        Button {
+            visible: booksApi.error.length > 0
+            text: "重试"
+            onClicked: searchBooks(activeKeyword, currentPage)
+        }
+        RowLayout {
+            Button {
+                text: "上一页"
+                enabled: !booksApi.loading && booksApi.error.length === 0 && currentPage > 1
+                onClicked: searchBooks(activeKeyword, currentPage - 1)
+            }
+            Label { text: currentPage + " / " + totalPages }
+            Button {
+                text: "下一页"
+                enabled: !booksApi.loading && booksApi.error.length === 0 && currentPage < totalPages
+                onClicked: searchBooks(activeKeyword, currentPage + 1)
+            }
+        }
         // 3. 公共图书列表组件
         BookListView {
             id: bookList
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            visible: !booksApi.loading && booksApi.error.length === 0
             bookModel: visibleBooks
 
             // 接收图书被点击的信号
@@ -58,56 +90,23 @@ Page {
         }
     }
 
-    // 4. 模拟图书数据
-    ListModel {
-        id: allBooks
-        ListElement {
-            bookTitle: "C++ Primer"
-            author: "Stanley B. Lippman"
-            isbn: "9780321714114"
-        }
-
-        ListElement {
-            bookTitle: "Java 核心技术"
-            author: "Cay S. Horstmann"
-            isbn: "9780137673629"
-        }
-
-        ListElement {
-            bookTitle: "深入理解计算机系统"
-            author: "Randal E. Bryant"
-            isbn: "9780134092669"
+    property int currentPage: 1
+    property int totalPages: 0
+    property string activeKeyword: ""
+    ListModel { id: visibleBooks }
+    BookService {
+        id: booksApi
+        onBooksReceived: function(books, meta) {
+            visibleBooks.clear()
+            for (let book of books) visibleBooks.append(book)
+            currentPage = meta.page
+            totalPages = meta.total_pages
         }
     }
-    ListModel {
-        id: visibleBooks
-    }
-    function searchBooks(keyword) {
-
-        // 先清空上一次的搜索结果
+    function searchBooks(keyword, page = 1) {
+        activeKeyword = keyword
         visibleBooks.clear()
-
-        // 去除关键词两端空格，并统一转成小写
-        keyword = keyword.trim().toLowerCase()
-
-        // 遍历所有图书
-        for (let i = 0; i < allBooks.count; i++) {
-
-            // 获取第 i 本图书
-            let book = allBooks.get(i)
-
-            // 判断书名或 ISBN 是否包含关键词
-            if (book.bookTitle.toLowerCase().includes(keyword)
-                    || book.isbn.includes(keyword)) {
-
-                // 将符合条件的图书加入显示模型
-                visibleBooks.append({
-                    bookTitle: book.bookTitle,
-                    author: book.author,
-                    isbn: book.isbn
-                })
-            }
-        }
+        booksApi.search(keyword, page, 20)
     }
     // 图书详情弹窗
     Dialog {

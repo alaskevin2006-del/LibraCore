@@ -4,7 +4,7 @@ project(client VERSION 0.1 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Quick)
+find_package(Qt6 REQUIRED COMPONENTS Quick Network)
 
 qt_standard_project_setup(REQUIRES 6.10)
 
@@ -15,6 +15,8 @@ endif()
 
 qt_add_executable(appclient
     src/main.cpp
+    network/BookService.cpp
+    network/BookService.h
 )
 
 qt_add_qml_module(appclient
@@ -51,7 +53,7 @@ set_target_properties(appclient PROPERTIES
 )
 
 target_link_libraries(appclient
-    PRIVATE Qt6::Quick
+    PRIVATE Qt6::Quick Qt6::Network
 )
 
 install(TARGETS appclient
