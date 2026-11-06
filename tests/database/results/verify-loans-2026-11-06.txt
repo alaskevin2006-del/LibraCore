@@ -1,0 +1,25 @@
+LibraCore 第 10 周借还验证 | MySQL 8.0.46 | 2026-11-06T15:14:45
+==============================================================================
+T10-1 正常借书                                 PASS copy_id=1 loan_id=4
+T10-1a 副本变为 borrowed                       PASS
+T10-1b 借阅记录为 active                        PASS
+T10-1c 可借数减少 1                             PASS
+T10-1d 当前借阅视图可见                            PASS
+T10-2 重复借同一副本被拒                            PASS ERROR 1644 (45000) at line 1: COPY_UNAVAILABLE
+T10-2a 未产生第二条 active                       PASS
+T10-3 正常还书                                 PASS
+T10-3a 副本回到 available                      PASS
+T10-3b returned_at 已写入                     PASS
+T10-3c 可借数恢复                               PASS
+T10-4 重复还书被拒                               PASS ERROR 1644 (45000) at line 1: ALREADY_RETURNED
+T10-5 无效读者被拒                               PASS ERROR 1644 (45000) at line 1: READER_NOT_FOUND
+T10-6 停用读者被拒                               PASS ERROR 1644 (45000) at line 1: READER_SUSPENDED
+T10-7 无效副本被拒                               PASS ERROR 1644 (45000) at line 1: COPY_NOT_FOUND
+T10-7a 无效借阅记录被拒                            PASS ERROR 1644 (45000) at line 1: LOAN_NOT_FOUND
+T10-8 并发争抢仅一次成功                            PASS 成功=1 失败=['ERROR 1644 (45000) at line 1: COPY_UNAVAILABLE']
+T10-8a 副本最终为 borrowed                      PASS
+T10-8b 该副本仅一条 active 借阅                    PASS
+T10-8c 无半更新（借阅记录与副本一致）                     PASS
+T10-9 验证后恢复初始数据                            PASS books/copies/loans=16/44/3
+==============================================================================
+合计 21 项，通过 21，失败 0

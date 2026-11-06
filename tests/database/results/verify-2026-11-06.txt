@@ -1,0 +1,127 @@
+==> 执行 schema.sql
+==> 执行 seed.sql
+==> 结构 / 数据一致性校验
++-----------------------------------+----------+--------+--------+
+| check_item                        | expected | actual | result |
++-----------------------------------+----------+--------+--------+
+| tables_present                    |        5 |      5 | PASS   |
+| inventory_view_present            |        1 |      1 | PASS   |
+| generated_active_copy_column      |        1 |      1 | PASS   |
+| returned_at_check_constraint      |        1 |      1 | PASS   |
+| no_cascade_fk_on_loans            |        0 |      0 | PASS   |
+| active_books                      |       15 |     15 | PASS   |
+| archived_books                    |        1 |      1 | PASS   |
+| copies_total                      |       44 |     44 | PASS   |
+| copies_available                  |       41 |     41 | PASS   |
+| copies_borrowed                   |        2 |      2 | PASS   |
+| copies_retired                    |        1 |      1 | PASS   |
+| loans_active                      |        2 |      2 | PASS   |
+| loans_returned                    |        1 |      1 | PASS   |
+| book1_total_copies                |        3 |      3 | PASS   |
+| book1_available_copies            |        2 |      2 | PASS   |
+| book4_available_copies            |        1 |      1 | PASS   |
+| retired_excluded_from_total       |        0 |      0 | PASS   |
+| active_loan_copy_state_consistent |        0 |      0 | PASS   |
+| returned_loans_have_returned_at   |        0 |      0 | PASS   |
+| no_duplicate_active_copy          |        0 |      0 | PASS   |
++-----------------------------------+----------+--------+--------+
+==> 完成。请把上面的 PASS/FAIL 表格保存到 tests/database/results/ 作为验收证据。
++-------+
+| books |
++-------+
+|    16 |
++-------+
++--------+
+| copies |
++--------+
+|     44 |
++--------+
++-------+
+| loans |
++-------+
+|     3 |
++-------+
+
+=== T9 重启持久化复查（未重新初始化，直接读原数据目录）===
++---------------+
+| mysql_version |
++---------------+
+| 8.0.46        |
++---------------+
++-------+
+| books |
++-------+
+|    16 |
++-------+
++--------+
+| copies |
++--------+
+|     44 |
++--------+
++-------+
+| loans |
++-------+
+|     3 |
++-------+
+=== 重启后 20 项断言 ===
++-----------------------------------+----------+--------+--------+
+| check_item                        | expected | actual | result |
++-----------------------------------+----------+--------+--------+
+| tables_present                    |        5 |      5 | PASS   |
+| inventory_view_present            |        1 |      1 | PASS   |
+| generated_active_copy_column      |        1 |      1 | PASS   |
+| returned_at_check_constraint      |        1 |      1 | PASS   |
+| no_cascade_fk_on_loans            |        0 |      0 | PASS   |
+| active_books                      |       15 |     15 | PASS   |
+| archived_books                    |        1 |      1 | PASS   |
+| copies_total                      |       44 |     44 | PASS   |
+| copies_available                  |       41 |     41 | PASS   |
+| copies_borrowed                   |        2 |      2 | PASS   |
+| copies_retired                    |        1 |      1 | PASS   |
+| loans_active                      |        2 |      2 | PASS   |
+| loans_returned                    |        1 |      1 | PASS   |
+| book1_total_copies                |        3 |      3 | PASS   |
+| book1_available_copies            |        2 |      2 | PASS   |
+| book4_available_copies            |        1 |      1 | PASS   |
+| retired_excluded_from_total       |        0 |      0 | PASS   |
+| active_loan_copy_state_consistent |        0 |      0 | PASS   |
+| returned_loans_have_returned_at   |        0 |      0 | PASS   |
+| no_duplicate_active_copy          |        0 |      0 | PASS   |
++-----------------------------------+----------+--------+--------+
+
+=== v1.1 第10周对象重启持久化复查 ===
++-------+
+| views |
++-------+
+|     4 |
++-------+
++------------+
+| procedures |
++------------+
+|          2 |
++------------+
++-------+
+| books |
++-------+
+|    16 |
++-------+
++--------+
+| copies |
++--------+
+|     44 |
++--------+
++-------+
+| loans |
++-------+
+|     3 |
++-------+
+=== 重启后 20 项断言 ===
+| check_item                        | expected | actual | result |
+=== 重启后第10周借还测试 ===
+T10-8b 该副本仅一条 active 借阅                    PASS
+T10-8c 无半更新（借阅记录与副本一致）                     PASS
+T10-9 验证后恢复初始数据                            PASS books/copies/loans=16/44/3
+==============================================================================
+合计 21 项，通过 21，失败 0
+证据文件: E:\ruangongshixun\LibraCore\tests\database\results\verify-loans-2026-11-06.txt
+重启后结构断言: 20/20 PASS
