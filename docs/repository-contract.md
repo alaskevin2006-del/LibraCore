@@ -81,4 +81,5 @@
 
 - `queryBooks` 的 `includeArchived`、副本列表是否含 retired，取决于两个待评审项，当前取契约默认行为。
 - Repository 未做字段级校验（长度、ISBN 格式），契约的 422 校验应由 Controller 承担。
-- Repository 代码未在目标环境编译过（本机无 Drogon / MySQL），合入前需在服务器环境跑一次 CMake 构建。
+- SQL 层已在真实 **MySQL 8.0.46** 上执行并通过全部 20 项校验、3 个异常用例与重启持久化复查（证据见 `tests/database/results/verify-2026-11-06.txt`）。
+- Repository 代码仍未在带 Drogon 的环境编译过（本机无 Drogon），合入前需在服务器环境跑一次 CMake 构建；`server/src/main.cpp` 也尚不存在，链接需要入口文件。

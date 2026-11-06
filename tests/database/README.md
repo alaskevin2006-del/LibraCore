@@ -32,37 +32,36 @@ docker compose exec -T mysql sh -c 'mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" li
 
 ## 3. 测试记录
 
-> **状态说明（重要）**：执行本次代码核查的开发机上**没有 MySQL 客户端，也没有 Docker**，因此以下用例的脚本已备好，但**尚未在真实数据库上运行过**。表中「实际结果」留空，需在有 MySQL 8 的环境执行一次后填写，不得预先填入 PASS。执行后把 `verify_init.sh` 的完整输出保存到 `results/verify-<日期>.txt`。
+> **执行状态**：2026-11-06 已在真实 **MySQL 8.0.46**（本机免安装临时实例，`127.0.0.1:3307`）上全部执行完毕，输出见 `results/verify-2026-11-06.txt`。T1—T10 全部通过；T6 预期报错 1062、T7 预期影响 0 行，均按预期生效。执行过程中发现并修复了 1 个建表错误与 1 个文档坑（见第 4 节）。
 
 | 编号 | 用例 | 预期结果 | 实际结果 | 状态 |
 | --- | --- | --- | --- | --- |
-| T1 | 全新空库执行 `schema.sql` | 建成 5 表 + 1 视图，无报错 | | 待执行 |
-| T2 | 执行 `seed.sql` | 16 书目 / 44 副本 / 3 借阅 / 3 读者 / 1 管理员 | | 待执行 |
-| T3 | `verify_schema.sql` 全部断言 | 所有 `result = PASS` | | 待执行 |
-| T4 | `v_book_inventory` 汇总核对 | book1 total=3/available=2，book4 available=1，book16 total=0 | | 待执行 |
-| T5 | 分页检索（page=1/2, page_size=10） | 15 条 active 书目分两页，归档书目不出现 | | 待执行 |
-| T6 | 同一副本重复借出 | 因 `uk_loan_active_copy` 报 1062，不产生第二条 active | | 待执行 |
-| T7 | 归档仍有 borrowed 副本的书目 | 影响行数为 0，书目仍为 active（对应 409） | | 待执行 |
-| T8 | 读者软注销 | status 变 suspended，借阅历史未被删除 | | 待执行 |
-| T9 | **数据库重启后复查** | 数据完整、视图可查、约束仍在 | | 待执行 |
-| T10 | 再次执行 `seed.sql` | 可重复执行，数据条数不变、无外键报错 | | 待执行 |
+| T1 | 全新空库执行 `schema.sql` | 建成 5 表 + 1 视图，无报错 | 5 张表 + `v_book_inventory` 视图，无报错 | 通过 |
+| T2 | 执行 `seed.sql` | 16 书目 / 44 副本 / 3 借阅 / 3 读者 / 1 管理员 | 全部一致 | 通过 |
+| T3 | `verify_schema.sql` 全部断言 | 所有 `result = PASS` | 20/20 PASS | 通过 |
+| T4 | `v_book_inventory` 汇总核对 | book1 total=3/available=2，book4 available=1，book16 total=0 | 3/2、1、0，全部一致 | 通过 |
+| T5 | 分页检索（page=1/2, page_size=10） | 15 条 active 书目分两页，归档书目不出现 | 第 1 页 10 行、第 2 页 5 行，archived id=16 未泄漏 | 通过 |
+| T6 | 同一副本重复借出 | 因 `uk_loan_active_copy` 报 1062，不产生第二条 active | `ERROR 1062 ... uk_loan_active_copy`，active 仍为 2 条 | 通过 |
+| T7 | 归档仍有 borrowed 副本的书目 | 影响行数为 0，书目仍为 active（对应 409） | `ROW_COUNT()=0`，id=1 仍为 active | 通过 |
+| T8 | 读者软注销 | status 变 suspended，借阅历史未被删除 | status=suspended，借阅记录 2→2 条未变 | 通过 |
+| T9 | **数据库重启后复查** | 数据完整、视图可查、约束仍在 | 优雅 shutdown 后重启同一数据目录：16/44/3 不变，20/20 PASS | 通过 |
+| T10 | 再次执行 `seed.sql` | 可重复执行，数据条数不变、无外键报错 | 多次重跑均成功、条数不变（需 utf8mb4 客户端） | 通过 |
 
 ### T9 重启持久化步骤
 
 ```bash
 # 1. 记录重启前快照
-mysql -u <user> -p -e "SELECT COUNT(*) FROM books; SELECT COUNT(*) FROM book_copies;" libra_core
+mysql --default-character-set=utf8mb4 -u <user> -p -e "SELECT COUNT(*) FROM books; SELECT COUNT(*) FROM book_copies;" libra_core
 
 # 2. 重启数据库
-docker compose restart mysql          # Docker 方式
-# 或 systemctl restart mysqld         # 本机服务方式
+docker compose restart mysql                    # Docker 方式
+# 或 mysqladmin -u <user> -p shutdown 后重新执行 mysqld（免安装版）
 
 # 3. 重启后复查（应输出同样条数，且全部 PASS）
-bash tests/database/verify_init.sh    # 若只复查，直接跑 verify_schema.sql 即可
-mysql -u <user> -p < tests/database/verify_schema.sql
+mysql --default-character-set=utf8mb4 -u <user> -p libra_core < tests/database/verify_schema.sql
 ```
 
-注意：Docker 的 `docker-entrypoint-initdb.d` 脚本只在**空卷首次启动**执行；重启不应重新初始化，这正是 T9 要验证的持久化行为。
+注意：Docker 的 `docker-entrypoint-initdb.d` 脚本只在**空卷首次启动**执行；重启不应重新初始化，这正是 T9 要验证的持久化行为。本次实测使用免安装版：优雅 shutdown 后重启同一数据目录，数据条数与 20 项断言全部保持不变。
 
 ## 4. 失败与修复记录
 
@@ -73,11 +72,12 @@ mysql -u <user> -p < tests/database/verify_schema.sql
 | 2026-11-06 | v0.1 `fk_borrow_reader` 为 `ON DELETE CASCADE` | 注销读者保留借阅历史 | 历史被连带删除 | 外键策略错误 | 改为 RESTRICT + 软注销 |
 | 2026-11-06 | `books.total_copies/available_copies` 可由 `updateBook` 直接改写 | 契约标为 readOnly | 计数与副本状态可能不一致 | 冗余可写字段 | 移除物理列，改由 `v_book_inventory` 聚合 |
 | 2026-11-06 | `ReaderRepository` 列表查询返回 `password_hash` | 列表不含密码哈希 | 哈希随列表带出 | SELECT 未过滤敏感列 | 列表/详情不查该列，另设认证专用查询 |
+| 2026-11-06 | **真实执行 `schema.sql`**：`ERROR 1215 Cannot add foreign key constraint`（`borrow_records`） | 5 张表全部建成 | 仅建成 4 张 | `copy_id` 被 STORED 生成列 `active_copy_id` 表达式引用，MySQL 8 禁止该列上的外键带 `ON UPDATE CASCADE` | 二分测试定位后，两个外键统一改为只写 `ON DELETE RESTRICT`（ID 为自增主键，业务不 UPDATE）；重跑 20/20 PASS |
+| 2026-11-06 | 手动重跑 `seed.sql`：`ERROR 1406 Data too long for column 'name'` | 正常插入中文数据 | 插入失败 | 中文 Windows 下 mysql 客户端默认字符集为 **gbk** | 手动命令一律加 `--default-character-set=utf8mb4`（`verify_init.sh` 已内置）；已补进 `database/README.md` |
 
-> 上表记录的是**静态代码审查发现并已修复的问题**，不等同于运行时测试结果；T1—T10 仍需实际执行后补充运行结果。
+> 前 5 行为静态代码审查发现并修复的问题，后 2 行为**真实数据库执行时**发现并修复的问题。T1—T10 的运行时结果见第 3 节与 `results/verify-2026-11-06.txt`。
 
 ## 5. 证据归档
 
-- `results/verify-<日期>.txt`：`verify_init.sh` 的完整终端输出。
-- 重启前后快照可另存 `results/persistence-<日期>.txt`。
+- `results/verify-2026-11-06.txt`：本次 `verify_init.sh` 完整输出、重启前快照、T9 重启后复查的 20 项断言。
 - 输出中不含任何真实密码、令牌或个人信息；提交前再确认一次。

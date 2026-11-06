@@ -43,20 +43,20 @@ read -rs DB_PASSWORD && export DB_PASSWORD
 bash tests/database/verify_init.sh
 ```
 
-或直接：
+或直接（**中文 Windows 必须带 `--default-character-set=utf8mb4`**，否则 mysql 客户端默认 gbk，seed.sql 的中文会报 `Data too long for column 'name'`）：
 
 ```bash
-mysql -u <user> -p < database/schema.sql
-mysql -u <user> -p < database/seed.sql
-mysql -u <user> -p < tests/database/verify_schema.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/schema.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/seed.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < tests/database/verify_schema.sql
 ```
 
 ### 方式 C：已有旧库升级
 
 ```bash
-mysql -u <user> -p < database/migrations/001_align_openapi_v0_2.sql
-mysql -u <user> -p < database/schema.sql
-mysql -u <user> -p < database/seed.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/migrations/001_align_openapi_v0_2.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/schema.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/seed.sql
 ```
 
 ## 4. 测试数据说明
@@ -85,3 +85,5 @@ mysql -u <user> -p < database/seed.sql
 | Docker 重启后结构没变 | initdb 脚本只在空卷首次启动执行 | `docker compose down -v` 后重新 `up` |
 | `Cannot truncate a table referenced in a foreign key constraint` | 用 TRUNCATE 清有外键的表 | seed.sql v1.0 已改用 `DELETE` + 关闭外键检查 |
 | 归档书目失败 | 该书仍有 `borrowed` 副本 | 契约约定返回 409 `RESOURCE_IN_USE`，先处理归还 |
+| `Data too long for column 'name'`（中文 Windows） | mysql 客户端默认字符集为 gbk，中文转换后超长 | 命令加 `--default-character-set=utf8mb4`；`verify_init.sh` 已内置 |
+| `ERROR 1215 Cannot add foreign key constraint` | 被 STORED 生成列引用的列带了 `ON UPDATE CASCADE` 外键 | v1.0.1 已把 `borrow_records` 两个外键改为只写 `ON DELETE RESTRICT` |

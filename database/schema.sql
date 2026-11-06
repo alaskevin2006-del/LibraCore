@@ -90,6 +90,9 @@ CREATE TABLE IF NOT EXISTS `book_copies` (
 --    active_copy_id 为 STORED 生成列 + UNIQUE，保证同一副本同时最多一条 active 借阅，
 --    这是第 10 周 M3「并发争用仅一次成功」的数据库层保障。
 --    status='returned' 时生成列为 NULL，MySQL 唯一索引允许多个 NULL，故历史记录可累积。
+--    MySQL 8 限制：被 STORED 生成列表达式引用的列（copy_id）不能带 ON UPDATE CASCADE
+--    外键，否则建表报 ERROR 1215；两个外键统一只用 ON DELETE RESTRICT。
+--    （copy_id / reader_id 指向自增主键，业务上不会 UPDATE，去掉级联更新无副作用。）
 -- ---------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS `borrow_records` (
     `id`             BIGINT AUTO_INCREMENT PRIMARY KEY,
@@ -104,9 +107,9 @@ CREATE TABLE IF NOT EXISTS `borrow_records` (
                      (CASE WHEN `status` = 'active' THEN `copy_id` ELSE NULL END) STORED
                      COMMENT '同一副本唯一 active 借阅约束',
     CONSTRAINT `fk_loan_copy` FOREIGN KEY (`copy_id`)
-        REFERENCES `book_copies` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        REFERENCES `book_copies` (`id`) ON DELETE RESTRICT,
     CONSTRAINT `fk_loan_reader` FOREIGN KEY (`reader_id`)
-        REFERENCES `readers` (`id`) ON DELETE RESTRICT ON UPDATE CASCADE,
+        REFERENCES `readers` (`id`) ON DELETE RESTRICT,
     UNIQUE KEY `uk_loan_active_copy` (`active_copy_id`),
     INDEX `idx_loan_reader_status` (`reader_id`, `status`),
     INDEX `idx_loan_due` (`due_at`),

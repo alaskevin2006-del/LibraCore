@@ -137,3 +137,4 @@
 | --- | --- | --- |
 | v0.1 | 2026-10-28 | 4 张核心表 + 数据字典初稿（PR #3） |
 | v1.0 | 2026-11-06 | 库名 `libracore` → `libra_core`；新增 `book_copies` 与 `v_book_inventory`；books 对齐契约字段并支持软归档；borrow_records 改造为以副本为借还对象并加唯一 active 约束；补齐 ER 图、迁移、初始化与验证脚本 |
+| v1.0.1 | 2026-11-06 | 真实 MySQL 8.0.46 执行时发现 `ERROR 1215`：`copy_id` 被 STORED 生成列引用，不能带 `ON UPDATE CASCADE` 外键；两个外键统一改为只写 `ON DELETE RESTRICT`。修复后 20 项校验、3 个异常用例、分页检索与重启持久化全部通过 |
