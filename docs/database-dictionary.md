@@ -138,3 +138,4 @@
 | v0.1 | 2026-10-28 | 4 张核心表 + 数据字典初稿（PR #3） |
 | v1.0 | 2026-11-06 | 库名 `libracore` → `libra_core`；新增 `book_copies` 与 `v_book_inventory`；books 对齐契约字段并支持软归档；borrow_records 改造为以副本为借还对象并加唯一 active 约束；补齐 ER 图、迁移、初始化与验证脚本 |
 | v1.0.1 | 2026-11-06 | 真实 MySQL 8.0.46 执行时发现 `ERROR 1215`：`copy_id` 被 STORED 生成列引用，不能带 `ON UPDATE CASCADE` 外键；两个外键统一改为只写 `ON DELETE RESTRICT`。修复后 20 项校验、3 个异常用例、分页检索与重启持久化全部通过 |
+| v1.1 | 2026-11-06 | 第 10 周借还数据层：新增 `v_loan_history` / `v_active_loans` / `v_overdue_loans` 三个派生视图，新增 `sp_borrow_book` / `sp_return_book` 事务性存储过程与 `LoanRepository`；新增借还规则与状态流转文档 `docs/loan-rules.md`、迁移 `migrations/002`、并发/异常测试 `tests/database/verify_loans.py`。表结构未变，属纯增量 |

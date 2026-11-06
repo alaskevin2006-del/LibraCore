@@ -131,3 +131,35 @@ FROM `books` `b`
 LEFT JOIN `book_copies` `c`
     ON `c`.`book_id` = `b`.`id` AND `c`.`status` <> 'retired'
 GROUP BY `b`.`id`;
+
+-- ---------------------------------------------------------------------------
+-- 7. 借阅明细视图（第 10 周）：一次 JOIN 补齐书目与读者展示字段，
+--    避免契约待评审项 loan-denormalization 提到的 N+1 请求。
+--    逾期是推导值 is_overdue，不是独立状态。
+-- ---------------------------------------------------------------------------
+CREATE OR REPLACE VIEW `v_loan_history` AS
+SELECT
+    `br`.`id`          AS `loan_id`,
+    `br`.`copy_id`     AS `copy_id`,
+    `c`.`book_id`      AS `book_id`,
+    `b`.`title`        AS `title`,
+    `b`.`author`       AS `author`,
+    `br`.`reader_id`   AS `reader_id`,
+    `r`.`name`         AS `reader_name`,
+    `br`.`status`      AS `status`,
+    `br`.`borrowed_at` AS `borrowed_at`,
+    `br`.`due_at`      AS `due_at`,
+    `br`.`returned_at` AS `returned_at`,
+    (`br`.`status` = 'active' AND `br`.`due_at` < NOW()) AS `is_overdue`
+FROM `borrow_records` `br`
+JOIN `book_copies` `c` ON `c`.`id` = `br`.`copy_id`
+JOIN `books`       `b` ON `b`.`id` = `c`.`book_id`
+JOIN `readers`     `r` ON `r`.`id` = `br`.`reader_id`;
+
+CREATE OR REPLACE VIEW `v_active_loans` AS
+SELECT * FROM `v_loan_history` WHERE `status` = 'active';
+
+CREATE OR REPLACE VIEW `v_overdue_loans` AS
+SELECT * FROM `v_loan_history` WHERE `status` = 'active' AND `due_at` < NOW();
+
+-- 事务性借还存储过程见 database/procedures.sql（verify_init.sh 会自动执行）。

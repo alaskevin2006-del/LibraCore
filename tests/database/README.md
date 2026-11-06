@@ -81,3 +81,24 @@ mysql --default-character-set=utf8mb4 -u <user> -p libra_core < tests/database/v
 
 - `results/verify-2026-11-06.txt`：本次 `verify_init.sh` 完整输出、重启前快照、T9 重启后复查的 20 项断言。
 - 输出中不含任何真实密码、令牌或个人信息；提交前再确认一次。
+
+## 6. 第 10 周借还验证（M3）
+
+`verify_loans.py` 在真实 MySQL 上覆盖第 10 周评分点，执行方式：
+
+```bash
+DB_HOST=127.0.0.1 DB_PORT=3306 DB_USER=<user> DB_PASSWORD=<pwd> \
+    python tests/database/verify_loans.py
+```
+
+| 用例 | 内容 |
+| --- | --- |
+| T10-1 | 正常借 → 副本变 borrowed → 记录 active → 可借数减 1 → 当前借阅视图可见 |
+| T10-2 | 已借出的副本再次借：`COPY_UNAVAILABLE`，且不产生第二条 active |
+| T10-3 | 正常还 → 副本回 available → `returned_at` 非空 → 可借数恢复 |
+| T10-4 | 重复还：`ALREADY_RETURNED` |
+| T10-5~7 | 无效读者 / 停用读者 / 无效副本 / 无效借阅记录 |
+| T10-8 | **两个连接并发争抢同一副本**：仅一次成功，副本状态与 active 记录一致，无半更新 |
+| T10-9 | 验证后恢复初始数据（16/44/3），不污染后续校验 |
+
+结果自动写入 `results/verify-loans-<日期>.txt`。事务与规则说明见 `docs/loan-rules.md`。

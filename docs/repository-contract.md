@@ -69,6 +69,24 @@
 - **并发**：`uk_loan_active_copy` 保证同一副本不会同时出现两条 active 借阅；Service 层仍需在事务内更新副本状态与借阅记录。
 - **密码**：`password_hash` 只在 `getReaderByCardIdForAuth` 中返回，任何列表/详情路径都不会带出。
 
+## 5.1 第 10 周：LoanRepository（借还数据层）
+
+| 文件 | 职责 |
+| --- | --- |
+| `server/src/repositories/LoanRepository.h/.cpp` | 借书、还书、当前借阅、借阅历史、逾期查询 |
+| `database/procedures.sql` | `sp_borrow_book` / `sp_return_book`，事务与行锁的真实实现 |
+| `docs/loan-rules.md` | 借还规则、状态流转图、一致性不变量、错误码 |
+
+| 方法 | 说明 |
+| --- | --- |
+| `borrowBook(copyId, readerId, loanDays, cb, errCb)` | 一次 `CALL sp_borrow_book(?,?,?)`，回调返回新 `loan_id` |
+| `returnBook(loanId, cb, errCb)` | 一次 `CALL sp_return_book(?)` |
+| `queryActiveLoansByReader / queryLoanHistoryByReader / queryOverdueLoans` | 分别查 `v_active_loans` / `v_loan_history` / `v_overdue_loans` |
+
+**错误码映射（Controller 负责）**：`COPY_UNAVAILABLE`、`ALREADY_RETURNED` → 409；`COPY_NOT_FOUND`、`READER_NOT_FOUND`、`LOAN_NOT_FOUND` → 404；`READER_SUSPENDED` → 403。借期 `loanDays` 由 Service 按团队确认的 `loan-policy` 传入，不写死在数据库。
+
+> 事务放在存储过程而非 C++ 层：数据库逻辑已可在真实 MySQL 上独立验证（含并发），C++ 层只需一次 CALL，不依赖 Drogon `Transaction` API 的具体形式。`LoanRepository` 仍需在带 Drogon 的环境编译验证。
+
 ## 6. 尚需后端（lkx）配合的事项（本次未改动他人文件）
 
 1. `server/src/controllers/` 目前仍只有 `.gitkeep`，Controller 与借还 Service 尚未实现；图书/读者 API 的归属需按技术设计文档再确认一次。

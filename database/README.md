@@ -11,11 +11,15 @@
 
 | 顺序 | 文件 | 说明 |
 | --- | --- | --- |
-| 1 | `schema.sql` | 建库、建 5 张表、建 `v_book_inventory` 视图；全新库直接执行 |
-| 2 | `seed.sql` | 虚构种子数据；可重复执行（先清空再插入） |
-| 3 | `../tests/database/verify_schema.sql` | 结构与数据一致性校验 |
+| 1 | `schema.sql` | 建库、建 5 张表、建 4 个视图（`v_book_inventory` + 第 10 周借阅视图）；全新库直接执行 |
+| 2 | `procedures.sql` | `sp_borrow_book` / `sp_return_book` 事务性借还存储过程；幂等 |
+| 3 | `seed.sql` | 虚构种子数据；可重复执行（先清空再插入） |
+| 4 | `../tests/database/verify_schema.sql` | 结构与数据一致性校验 |
+| 5 | `../tests/database/verify_loans.py` | 第 10 周借还业务、并发与一致性验证 |
 
-`migrations/001_align_openapi_v0_2.sql` 仅用于**从 v0.1 旧结构升级**；骨架期推荐直接重建，见第 4 节。
+`verify_init.sh` 会自动按 1→2→3→4 执行；`verify_loans.py` 单独运行。
+
+`migrations/001_align_openapi_v0_2.sql` 仅用于**从 v0.1 旧结构升级**；`migrations/002_week10_loans.sql` 用于 **v1.0.1 → v1.1** 补第 10 周视图（随后执行 `procedures.sql`）；骨架期推荐直接重建，见第 4 节。
 
 ## 3. 初始化方式
 
@@ -56,7 +60,12 @@ mysql --default-character-set=utf8mb4 -u <user> -p < tests/database/verify_schem
 ```bash
 mysql --default-character-set=utf8mb4 -u <user> -p < database/migrations/001_align_openapi_v0_2.sql
 mysql --default-character-set=utf8mb4 -u <user> -p < database/schema.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/procedures.sql
 mysql --default-character-set=utf8mb4 -u <user> -p < database/seed.sql
+
+# v1.0.1 -> v1.1：补第 10 周借还对象（幂等）
+mysql --default-character-set=utf8mb4 -u <user> -p < database/migrations/002_week10_loans.sql
+mysql --default-character-set=utf8mb4 -u <user> -p < database/procedures.sql
 ```
 
 ## 4. 测试数据说明

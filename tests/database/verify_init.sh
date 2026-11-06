@@ -29,6 +29,7 @@ MYSQL_CMD=(mysql
 
 for sql_file in \
     "$REPO_ROOT/database/schema.sql" \
+    "$REPO_ROOT/database/procedures.sql" \
     "$REPO_ROOT/database/seed.sql"
 do
     echo "==> 执行 $(basename "$sql_file")"
