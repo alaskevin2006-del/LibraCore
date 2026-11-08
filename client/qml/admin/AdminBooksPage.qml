@@ -1,7 +1,7 @@
-//部分模拟代码最后可以去掉
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import LibraCore.Network 1.0
 
 // 图书管理页面page,作为一个根节点，由 AdminHome.qml 加载
 // 不需要再创建 ApplicationWindow
@@ -10,14 +10,19 @@ Page {
 
     // 页面状态
 
-    // 是否使用本地假数据
-    property bool demoMode: true // property全局可见，属性绑定
+    property bool demoMode: false
 
-    // 是否在加载中
-    property bool loading: false
+    // 加载状态由网络模块统一维护
+    readonly property bool loading: booksApi.loading
 
     // 错误信息，空字符串代表没有错误
     property string errorMessage: ""
+
+    // 分页状态
+    property int currentPage: 1
+    property int totalPages: 0
+    property int totalBooks: 0
+    property string activeKeyword: ""
 
     // 认为表单操作提示信息
     property string formMessage: ""
@@ -27,30 +32,6 @@ Page {
     // 定义一个信号（signal），名叫 booksRequested，携带一个字符串参数 keyword（也就是用户在搜索框里输入的关键词）
     // 如果Page外部绑定了这个信号，点击查询时外部就会收到通知
     signal booksRequested(string keyword)
-
-
-
-    // 本地模拟数据
-
-    // var 是 QML 的一种属性类型，这里保存 JavaScript 数组
-    // 定义一个名为 demoBooks 的数组，里面有三个对象，包含书名、作者、ISBN
-    property var demoBooks: [
-        {
-            title: "C++ Primer",
-            author: "Lippman",
-            isbn: "9780321714114"
-        },
-        {
-            title: "书",
-            author: "hyq",
-            isbn: "001"
-        },
-        {
-            title: "书书",
-            author: "hyqqq",
-            isbn: "002"
-        }
-    ]
 
     // ListModel 保存当前需要展示的数据，比普通数组好在界面会自动刷新
     ListModel {
@@ -63,20 +44,19 @@ Page {
     // rows 应当是一个由图书对象组成的数组
     // 例如 [{title:"...",author:"...",isbn:"..."}]
     function showBooks(rows) {
-        // 先清空旧的显示数据
         bookModel.clear()
 
-        // 确保传入的是数组
-        if (!Array.isArray(rows)) {
+        // BookService 返回 QVariantList。
+        // 这里按可遍历序列处理，不强制要求 Array.isArray()。
+        if (rows === null || rows === undefined
+                || typeof rows.length !== "number") {
             showError("图书数据格式不正确")
             return
         }
 
-        // 遍历返回的每一本书
         for (let i = 0; i < rows.length; i++) {
             let book = rows[i]
 
-            // append 的作用与 C++ vector 的push_back 相似
             bookModel.append({
                 bookTitle: String(book.title ?? ""),
                 author: String(book.author ?? ""),
@@ -84,16 +64,12 @@ Page {
             })
         }
 
-        // 数据处理完成，关闭加载提示
-        page.loading = false
         page.errorMessage = ""
     }
 
-    // 请求失败时调用的函数
     function showError(message) {
-        page.loading = false //停止加载
-        bookModel.clear() //清空列表
-        page.errorMessage = String(message) // 设置错误信息
+        bookModel.clear()
+        page.errorMessage = String(message)
     }
 
 
@@ -101,88 +77,44 @@ Page {
     // 查询图书
 
     // 刷新查询图书的函数
+    // 点击查询、按回车、首次进入页面时使用。
+    // 新查询默认从第一页开始。
     function refreshBooks() {
-        // 获取搜索框里的文字，去掉首尾空格
-        let keyword = searchInput.text.trim()
+        page.activeKeyword = searchInput.text.trim()
+        requestBooks(1)
+    }
 
-        // 开始新请求，清除旧的加载状态、错误消息、列表
-        page.loading = true
+    // 翻页时继续使用上一次提交的关键词
+    function requestBooks(pageNumber) {
         page.errorMessage = ""
         bookModel.clear()
 
-        if (page.demoMode) {
-            // 演示模式：从本地数组筛选
-            let key = keyword.toLowerCase() // 搜索关键词转为小写
-
-            let result = page.demoBooks.filter(
-                function(book) {
-                    return book.title.toLowerCase().includes(key)
-                           || book.isbn.includes(key)
-                }
-            )
-
-            // 将查询结果交给显示函数
-            showBooks(result)
-        } else {
-            // 真实模式：发出bookRequested 信号，通知外部网络模块去请求数据
-            // 现在还没有实际连接它
-            booksRequested(keyword)
-        }
+        booksApi.search(page.activeKeyword, pageNumber, 20)
     }
 
-
-
-    // 模拟新增图书
-
-    //添加模拟图书的函数
-    function addDemoBook() {
-        // 还没有真实添加图书，只是学习基础表单和输入校验
-        if (!page.demoMode) {
-            return
-        }
-
-        //获取三个输入框的文字，去掉空格
-        let title = titleInput.text.trim()
-        let author = authorInput.text.trim()
-        let isbn = isbnInput.text.trim()
-
-        // 检查有没有漏填
-        if (title === "" || author === "" || isbn === "") {
-            page.formMessage = "请填写完整的图书信息"
-            return
-        }
-
-        // 简单检查 ISBN 是否重复
-        for (let i = 0; i < page.demoBooks.length; i++) {
-            if (page.demoBooks[i].isbn === isbn) {
-                page.formMessage = "ISBN 已存在（本地演示）"
-                return
-            }
-        }
-
-        // 向本地数组添加一本书
-        page.demoBooks.push({
-            title: title,
-            author: author,
-            isbn: isbn
-        })
-
-        // 清空输入内容
-        titleInput.text = ""
-        authorInput.text = ""
-        isbnInput.text = ""
-
-        page.formMessage = "模拟添加成功，未写入数据库"
-
-        // 清除搜索条件，再刷新列表
-        searchInput.text = ""
-        refreshBooks()
-    }
 
     // 当组件（页面）加载完成时，自动执行 refreshBooks() 查询一次
     Component.onCompleted: refreshBooks()
 
+    BookService {
+        id: booksApi
 
+        // 网络请求成功：更新列表和分页信息
+        onBooksReceived: function(books, meta) {
+            page.showBooks(books)
+
+            page.currentPage = meta.page
+            page.totalPages = meta.total_pages
+            page.totalBooks = meta.total
+        }
+
+        // 网络请求失败：显示错误
+        onStateChanged: {
+            if (booksApi.error.length > 0) {
+                page.showError(booksApi.error)
+            }
+        }
+    }
 
     // 绘制界面
 
@@ -196,13 +128,6 @@ Page {
             text: "管理员 - 图书管理"
             font.pixelSize: 24 //字体大小
             font.bold: true //是否为粗体
-        }
-
-        // 提示标签，只有当 demoMode 为 true 时才可见
-        Label {
-            visible: page.demoMode
-            text: "当前为本地演示模式，未连接数据库"
-            color: "#a66a00"
         }
 
         // 查询输入框和按钮
@@ -225,39 +150,6 @@ Page {
                 text: "查询"
                 enabled: !page.loading// 如果正在 loading，按钮禁用（变灰）
                 onClicked: page.refreshBooks() //点击时查询
-            }
-        }
-
-        // 下面这组按钮只用于测试页面状态
-        // 真实联网完成后可以隐藏
-        RowLayout {
-            visible: page.demoMode
-            Layout.fillWidth: true
-
-            Button {
-                text: "测试空数据"
-                onClicked: page.showBooks([])
-            }
-
-            Button {
-                text: "测试加载"
-                onClicked: {
-                    bookModel.clear()
-                    page.errorMessage = ""
-                    page.loading = true
-                }
-            }
-
-            Button {
-                text: "测试失败"
-                onClicked: page.showError(
-                    "模拟错误：服务器连接失败"
-                )
-            }
-
-            Button {
-                text: "恢复数据"
-                onClicked: page.refreshBooks()
             }
         }
 
@@ -369,55 +261,6 @@ Page {
 
             // 数据较多时可以滚动，显示滚动条
             ScrollBar.vertical: ScrollBar {}
-        }
-
-
-
-        //本地新增图书表单
-
-        // GroupBox 是带标题边框的盒子
-        GroupBox {
-            title: "新增图书表单（演示）"
-            Layout.fillWidth: true
-
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 6
-
-                RowLayout {
-                    Layout.fillWidth: true
-
-                    TextField {
-                        id: titleInput
-                        placeholderText: "书名"
-                        Layout.fillWidth: true
-                    }
-
-                    TextField {
-                        id: authorInput
-                        placeholderText: "作者"
-                        Layout.fillWidth: true
-                    }
-
-                    TextField {
-                        id: isbnInput
-                        placeholderText: "ISBN"
-                        Layout.fillWidth: true
-                    }
-
-                    Button {
-                        text: "模拟添加"
-                        enabled: page.demoMode
-                        onClicked: page.addDemoBook()
-                    }
-                }
-
-                Label {
-                    text: page.formMessage
-                    color: "#b00020"
-                    visible: page.formMessage !== ""
-                }
-            }
         }
     }
 }
