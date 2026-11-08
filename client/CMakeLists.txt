@@ -15,6 +15,8 @@ endif()
 
 qt_add_executable(appclient
     src/main.cpp
+    network/ApiClient.cpp
+    network/ApiClient.h
     network/BookService.cpp
     network/BookService.h
 )

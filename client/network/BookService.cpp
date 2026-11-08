@@ -1,47 +1,49 @@
 #include "BookService.h"
-#include <QJsonDocument>
+#include "ApiClient.h"
 #include <QJsonArray>
 #include <QJsonObject>
-#include <QUrlQuery>
 #include <cmath>
 
-void BookService::search(const QString &keyword, int page, int pageSize)
+BookService::~BookService()
+{
+    cancelSearch();
+}
+
+void BookService::cancelSearch()
 {
     if (active) {
         auto previous = active;
         active = nullptr;
         previous->abort();
     }
-    busy = true;
+}
+
+void BookService::search(const QString &keyword, int page, int pageSize)
+{
+    cancelSearch();
     message.clear();
-    emit stateChanged();
-    QUrl url(qEnvironmentVariable("LIBRACORE_API_URL", "http://localhost:8080"));
-    url.setPath("/api/v1/books");
-    QUrlQuery query;
-    query.addQueryItem("q", keyword.trimmed());
-    query.addQueryItem("page", QString::number(qMax(1, page)));
-    query.addQueryItem("page_size", QString::number(qBound(1, pageSize, 100)));
-    url.setQuery(query);
-    QNetworkRequest request(url);
-    request.setRawHeader("Accept", "application/json, application/problem+json");
-    request.setTransferTimeout(15000);
-    auto reply = manager.get(request);
+    auto *reply = ApiClient::instance().send("GET", "/api/v1/books", {
+        {"q", keyword.trimmed()},
+        {"page", qMax(1, page)},
+        {"page_size", qBound(1, pageSize, 100)}
+    });
+    busy = reply != nullptr;
+    if (!reply) {
+        message = tr("请求失败：服务地址无效");
+        emit stateChanged();
+        return;
+    }
+
     active = reply;
     connect(reply, &QNetworkReply::finished, this, [this, reply] {
-        reply->deleteLater();
         if (active != reply) return;
         active = nullptr;
         busy = false;
-        QJsonParseError parseError;
-        const auto doc = QJsonDocument::fromJson(reply->readAll(), &parseError);
-        const auto root = doc.object();
-        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
-        if (reply->error() != QNetworkReply::NoError || status != 200) {
-            const QString code = root.value("code").toString();
-            message = code.isEmpty() ? tr("请求失败：%1").arg(reply->errorString())
-                                     : tr("请求失败（HTTP %1，%2）").arg(status).arg(code);
-        } else if (parseError.error != QJsonParseError::NoError || !root.value("data").isArray()
-                   || !root.value("meta").isObject()) {
+        const auto response = ApiClient::readResponse(*reply);
+        const auto root = response.json.object();
+        if (!response.errorKind.isEmpty()) {
+            message = response.message;
+        } else if (response.status != 200 || !root.value("data").isArray() || !root.value("meta").isObject()) {
             message = tr("服务器响应格式错误：需要 data 数组和 meta 对象");
         } else {
             QVariantList books;
@@ -72,4 +74,5 @@ void BookService::search(const QString &keyword, int page, int pageSize)
         }
         emit stateChanged();
     });
+    emit stateChanged();
 }
