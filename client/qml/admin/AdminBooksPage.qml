@@ -2,6 +2,7 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import LibraCore.Network 1.0
 
 // 图书管理页面page,作为一个根节点，由 AdminHome.qml 加载
 // 不需要再创建 ApplicationWindow
@@ -11,7 +12,7 @@ Page {
     // 页面状态
 
     // 是否使用本地假数据
-    property bool demoMode: true // property全局可见，属性绑定
+    property bool demoMode: false // property全局可见，属性绑定
 
     // 是否在加载中
     property bool loading: false
@@ -22,14 +23,24 @@ Page {
     // 认为表单操作提示信息
     property string formMessage: ""
 
-    // 点击查询时，向外部发送信号
-    // 后面由 dhw 的网络模块接收并处理
-    // 定义一个信号（signal），名叫 booksRequested，携带一个字符串参数 keyword（也就是用户在搜索框里输入的关键词）
-    // 如果Page外部绑定了这个信号，点击查询时外部就会收到通知
-    signal booksRequested(string keyword)
+    property int currentPage: 1
+    property int totalPages: 0
 
-
-
+    BookService {
+        id: booksApi
+        onBooksReceived: function(books, meta) {
+            bookModel.clear()
+            for (let book of books)
+                bookModel.append(book)
+            page.currentPage = meta.page
+            page.totalPages = meta.total_pages
+            page.errorMessage = ""
+        }
+        onStateChanged: {
+            page.loading = booksApi.loading
+            page.errorMessage = booksApi.error
+        }
+    }
     // 本地模拟数据
 
     // var 是 QML 的一种属性类型，这里保存 JavaScript 数组
@@ -101,7 +112,7 @@ Page {
     // 查询图书
 
     // 刷新查询图书的函数
-    function refreshBooks() {
+    function refreshBooks(requestedPage = 1) {
         // 获取搜索框里的文字，去掉首尾空格
         let keyword = searchInput.text.trim()
 
@@ -124,9 +135,7 @@ Page {
             // 将查询结果交给显示函数
             showBooks(result)
         } else {
-            // 真实模式：发出bookRequested 信号，通知外部网络模块去请求数据
-            // 现在还没有实际连接它
-            booksRequested(keyword)
+            booksApi.search(keyword, requestedPage, 20)
         }
     }
 
@@ -228,6 +237,26 @@ Page {
             }
         }
 
+        RowLayout {
+            visible: !page.demoMode
+            Button {
+                text: "上一页"
+                enabled: !page.loading && page.errorMessage === "" && page.currentPage > 1
+                onClicked: page.refreshBooks(page.currentPage - 1)
+            }
+            Label { text: page.currentPage + " / " + page.totalPages }
+            Button {
+                text: "下一页"
+                enabled: !page.loading && page.errorMessage === "" && page.currentPage < page.totalPages
+                onClicked: page.refreshBooks(page.currentPage + 1)
+            }
+            Button {
+                text: "重试"
+                visible: page.errorMessage !== ""
+                enabled: !page.loading
+                onClicked: page.refreshBooks()
+            }
+        }
         // 下面这组按钮只用于测试页面状态
         // 真实联网完成后可以隐藏
         RowLayout {
@@ -377,6 +406,7 @@ Page {
 
         // GroupBox 是带标题边框的盒子
         GroupBox {
+            visible: page.demoMode
             title: "新增图书表单（演示）"
             Layout.fillWidth: true
 
