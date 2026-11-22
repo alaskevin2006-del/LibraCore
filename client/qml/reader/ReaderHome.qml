@@ -1,72 +1,71 @@
+pragma ComponentBehavior: Bound
+
 import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
+import "../components"
 
+// 读者端外壳：固定导航、页面栈和账户入口。
 Page {
     id: readerHome
+    property string currentPage: "home"
+    background: Rectangle { color: "#f5f6f8" }
 
-    // 是否正在显示图书查询页面
-    property bool showingBooks: false
+    function openPage(pageName) {
+        if (pageName === "home" || pageName === "books")
+            currentPage = pageName
+        if (pageName === "home")
+            readerStack.replace(indexComponent)
+        else if (pageName === "books")
+            readerStack.replace(booksComponent)
+        else {
+            placeholderTitle.text = pageName === "favorites" ? "我的收藏" : "我的借阅"
+            placeholderDialog.open()
+        }
+    }
 
     ColumnLayout {
         anchors.fill: parent
-        anchors.margins: 20
-        spacing: 20
-
-        // 返回按钮
-        Button {
-            text: "← 返回读者首页"
-            visible: readerHome.showingBooks
-
-            onClicked: readerHome.showingBooks = false
+        spacing: 0
+        ReaderNavigation {
+            Layout.fillWidth: true
+            currentPage: readerHome.currentPage
+            onPageRequested: function(pageName) { readerHome.openPage(pageName) }
+            onAccountRequested: function(action) {
+                placeholderTitle.text = action === "profile" ? "个人信息" : action === "password" ? "修改密码" : "退出登录"
+                placeholderDialog.open()
+            }
         }
-
-        // 根据当前状态切换页面
-        Loader {
+        StackView {
+            id: readerStack
             Layout.fillWidth: true
             Layout.fillHeight: true
-
-            sourceComponent: readerHome.showingBooks
-                             ? booksPageComponent
-                             : homeComponent
+            Layout.margins: 20
+            initialItem: indexComponent
         }
     }
-
-    // 读者主页
     Component {
-        id: homeComponent
-
-        ColumnLayout {
-            spacing: 20
-
-            Item {
-                Layout.fillHeight: true
-            }
-
-            Label {
-                text: "欢迎使用 LibraCore 图书管理系统"
-                font.pixelSize: 28
-                Layout.alignment: Qt.AlignHCenter
-            }
-
-            Button {
-                text: "查询图书"
-                Layout.alignment: Qt.AlignHCenter
-
-                onClicked: readerHome.showingBooks = true
-            }
-
-            Item {
-                Layout.fillHeight: true
-            }
+        id: indexComponent
+        ReaderIndexPage {
+            background: Rectangle { color: "transparent" }
+            onBrowseBooksRequested: readerHome.openPage("books")
         }
     }
-
-    // 图书查询页面
     Component {
-        id: booksPageComponent
-
+        id: booksComponent
         ReaderBooksPage {
+            background: Rectangle { color: "white"; radius: 12 }
+        }
+    }
+    // 骨架页面尚未实现，先明确提示，避免打开后出现空白。
+    Dialog {
+        id: placeholderDialog
+        anchors.centerIn: parent
+        modal: true
+        standardButtons: Dialog.Ok
+        ColumnLayout {
+            Label { id: placeholderTitle; font.pixelSize: 18 }
+            Label { text: "此功能尚未实现，当前仅预览读者端外观。" }
         }
     }
 }
