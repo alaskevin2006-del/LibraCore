@@ -1,95 +1,38 @@
 import QtQuick
 import QtQuick.Controls.Basic
-import QtQuick.Layouts
 
-// 导入我们自己创建的两个页面目录
 import "reader"
 import "admin"
 
+// 程序窗口只负责承载读者端或管理端，各端自己提供导航栏。
 ApplicationWindow {
     id: window
 
-    width: 900
-    height: 600
-    minimumWidth: 600
-    minimumHeight: 400
-
-    visible: true
+    width: 1000
+    height: 700
+    minimumWidth: 900
+    minimumHeight: 500
+    // 默认最大化；width/height 作为还原窗口后的尺寸。
+    visibility: Window.Maximized
     title: "LibraCore 图书馆管理系统"
 
-    // 整个主窗口采用垂直布局
-    ColumnLayout {
+    // 登录尚未接入，默认预览读者端。
+    // 开发时改成 "admin" 可预览管理端；后续由真实登录角色决定。
+    // 这个属性只用于界面选择，权限仍需后端校验。
+    property string previewRole: "reader"
+
+    Loader {
         anchors.fill: parent
-        spacing: 0
-
-        // 顶部导航栏
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: 60
-
-            color: "#2c3e50"
-
-            RowLayout {
-                anchors.fill: parent
-                anchors.leftMargin: 20
-                anchors.rightMargin: 20
-                spacing: 15
-
-                // 系统名称
-                Label {
-                    text: "LibraCore"
-                    font.pixelSize: 24
-                    font.bold: true
-                    color: "white"
-
-                    Layout.fillWidth: true
-                }
-
-                // 读者端按钮
-                Button {
-                    text: "读者端"
-
-                    onClicked: {
-                        stackView.replace(readerPage)
-                    }
-                }
-
-                // 管理员端按钮
-                Button {
-                    text: "管理员端"
-
-                    onClicked: {
-                        stackView.replace(adminPage)
-                    }
-                }
-            }
-        }
-
-        // 页面显示区域
-        StackView {
-            id: stackView
-
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-
-            // 程序启动时默认显示读者端
-            initialItem: readerPage
-        }
+        sourceComponent: window.previewRole === "admin" ? adminPage : readerPage
     }
 
-    // 读者端页面组件
     Component {
         id: readerPage
-
-        ReaderHome {
-        }
+        ReaderHome {}
     }
 
-    // 管理员端页面组件
     Component {
         id: adminPage
-
-        AdminHome {
-        }
+        AdminHome {}
     }
 }

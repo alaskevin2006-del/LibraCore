@@ -26,6 +26,18 @@ qt_add_qml_module(appclient
     QML_FILES
         qml/Main.qml
         qml/reader/ReaderHome.qml
+        qml/reader/ReaderIndexPage.qml
+        qml/reader/BookDetailPage.qml
+        qml/reader/MyFavoritesPage.qml
+        qml/reader/MyLoansPage.qml
+        qml/reader/AnnouncementPage.qml
+        qml/reader/ProfilePage.qml
+        qml/reader/ChangePasswordPage.qml
+        qml/auth/LoginPage.qml
+        qml/components/ReaderNavigation.qml
+        qml/components/BookCarousel.qml
+        qml/components/AnnouncementCard.qml
+        qml/components/BorrowConfirmDialog.qml
         qml/reader/ReaderBooksPage.qml
         qml/admin/AdminHome.qml
         qml/components/BookSearchBar.qml

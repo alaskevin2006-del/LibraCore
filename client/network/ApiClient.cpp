@@ -32,7 +32,7 @@ QNetworkReply *ApiClient::send(const QByteArray &method, const QString &path,
                                const QVariantMap &query, const QJsonDocument &body,
                                bool requiresAuth)
 {
-    QUrl url(qEnvironmentVariable("LIBRACORE_API_URL", "http://localhost:8080"), QUrl::StrictMode);
+    QUrl url(qEnvironmentVariable("LIBRACORE_API_URL", "https://124.221.230.69:18444"), QUrl::StrictMode);
     if (!url.isValid() || (url.scheme() != "http" && url.scheme() != "https")
         || url.host().isEmpty() || !url.userInfo().isEmpty()
         || !path.startsWith('/') || path.startsWith("//") || path.contains('?') || path.contains('#'))

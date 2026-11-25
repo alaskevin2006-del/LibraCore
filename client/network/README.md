@@ -46,7 +46,7 @@ QtObject {
 
 ## 图书查询验证
 
-默认服务地址 http://localhost:8080；启动前可用环境变量 LIBRACORE_API_URL 指定服务源地址。
+默认服务地址 https://124.221.230.69:18444（读者端与管理端共用）；启动前可用环境变量 LIBRACORE_API_URL 覆盖。Qt Creator 的运行环境若已设置该变量，也会覆盖默认地址。管理端图书查询默认使用真实接口，支持分页与失败重试；新增表单仍仅用于本地演示。
 
 使用 Qt Creator 打开 client/CMakeLists.txt，选择 Qt 6.10 或更新的 Kit，构建并运行。
 
