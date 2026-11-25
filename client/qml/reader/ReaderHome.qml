@@ -20,22 +20,41 @@ Page {
     // 统一处理页面请求，pageName 是调用方传来的字符串，例如 "books"。
     // 导航按钮和首页的查询按钮都调用这里，避免各处重复写跳转逻辑。
     function openPage(pageName) {
-        // || 表示“或者”。目前只有首页和图书大厅真正接入页面容器。
-        // 只在能打开实际页面时更新选中项；其他入口仍保留原选中状态。
-        if (pageName === "home" || pageName === "books")
-            currentPage = pageName
-        // replace() 替换页面栈顶部的页面；这里用它在两个主页面之间切换。
-        // 它不会保留被替换页面的实例，因此切回图书大厅会重新创建并查询。
-        if (pageName === "home")
-            readerStack.replace(indexComponent)
-        else if (pageName === "books")
-            readerStack.replace(booksComponent)
-        else {
-            // 收藏、借阅目前只有文件骨架，暂时显示提示，不打开空页面。
-            // 三元表达式：是 favorites 就显示“我的收藏”，否则显示“我的借阅”。
+        // 页面过渡时忽略重复点击，避免连续执行多个栈操作。
+        if (readerStack.busy)
+            return
+
+        if (pageName !== "home" && pageName !== "books") {
             placeholderTitle.text = pageName === "favorites" ? "我的收藏" : "我的借阅"
             placeholderDialog.open()
+            return
         }
+
+        // 主导航先清掉详情层，保留最底下的主页面。
+        // Immediate 表示立即完成，避免随后 replace 与返回动画冲突。
+        if (readerStack.depth > 1)
+            readerStack.pop(readerStack.get(0), StackView.Immediate)
+
+        // 点击当前主导航时不重新创建页面，保留原来的滚动和轮播状态。
+        if (currentPage === pageName)
+            return
+
+        currentPage = pageName
+        readerStack.replace(pageName === "home" ? indexComponent : booksComponent)
+    }
+
+    // 接收首页公告数据，在首页上方增加一个详情页，不销毁原首页。
+    function openAnnouncement(announcement) {
+        if (readerStack.busy || currentPage !== "home" || readerStack.depth !== 1)
+            return
+
+        // 左侧是详情页属性，右侧是首页数据中的字段。
+        readerStack.push(announcementComponent, {
+            announcementId: announcement.id,
+            title: announcement.title,
+            publishTime: announcement.time,
+            bodyText: announcement.body
+        })
     }
 
     // 从上到下排列：固定导航栏 → 剩余空间中的页面容器。
@@ -85,6 +104,10 @@ Page {
             background: Rectangle { color: "transparent" }
             // 接收首页“查询图书”按钮的信号，复用相同的跳转方法。
             onBrowseBooksRequested: readerHome.openPage("books")
+            // 首页发出完整公告数据，交给统一的详情打开方法。
+            onAnnouncementRequested: function(announcement) {
+                readerHome.openAnnouncement(announcement)
+            }
         }
     }
     // 图书大厅模板，保留 ReaderBooksPage 已有的查询功能。
@@ -95,6 +118,17 @@ Page {
             background: Rectangle { color: "white"; radius: 12 }
         }
     }
+    // 公告详情模板：界面由 AnnouncementPage 绘制，这里只管理返回。
+    Component {
+        id: announcementComponent
+        AnnouncementPage {
+            onBackRequested: {
+                if (!readerStack.busy && readerStack.depth > 1)
+                    readerStack.pop()
+            }
+        }
+    }
+
     // 骨架页面尚未实现，先明确提示，避免打开后出现空白。
     Dialog {
         id: placeholderDialog
